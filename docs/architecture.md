@@ -19,7 +19,7 @@ The split follows one rule: the **platform** stage holds everything a non-graphi
 
 | Step | What | Why |
 |---|---|---|
-| P1 | `packages/platform.packages` | system services, Asahi extras (tiny-dfr, widevine-installer, Honeykrisp), Docker, base CLI |
+| P1 | `packages/platform.packages` | system services, Asahi extras (tiny-dfr, widevine-installer, Honeykrisp: already in the base, listed so they stay), Docker, base CLI |
 | P2 | remove Firefox | the browser is a Flatpak |
 | P3 | systemd-boot; drop rpm-ostree/bootupd/GRUB; mask grub boot-success units | composefs + systemd-boot install; see [asahi.md](asahi.md) |
 | P4 | `COPY system/platform/ /` | units, helpers, tuning drop-ins, Apple HID modprobe/dracut config |
