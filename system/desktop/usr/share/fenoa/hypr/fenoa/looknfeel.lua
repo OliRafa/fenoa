@@ -49,8 +49,13 @@ hl.config({
     disable_splash_rendering = true,
     focus_on_activate = true,
     anr_missed_pings = 3,
-    -- Let a restarted shell re-acquire the session lock if Noctalia died while locked.
-    allow_session_lock_restore = true,
+    -- A second locker may not replace a live session lock. With this on, a client that starts its
+    -- own lock while the screen is locked takes over from Noctalia's lock screen, and can then
+    -- unlock. This only stops that replacement; code already running as the user can turn the
+    -- option back on with hyprctl. The price: if Noctalia dies while locked, the session stays
+    -- locked until it is recovered from a text console (docs/desktop.md, "If the lock screen
+    -- crashes").
+    allow_session_lock_restore = false,
   },
 
   cursor = {

@@ -164,6 +164,12 @@ grep -qF 'switch:on:Apple SMC power/lid events' "$hypr/fenoa/bindings.lua" ||
   fail "the lid binding uses the Apple Silicon switch name"
 pass "the lid binding uses the Apple Silicon switch name"
 
+# With lock restore on, a second locker started while the screen is locked replaces the live lock
+# screen and can unlock.
+grep -qE '^[[:space:]]*allow_session_lock_restore = false,' "$hypr/fenoa/looknfeel.lua" ||
+  fail "a second locker cannot replace the live session lock (allow_session_lock_restore = false)"
+pass "a second locker cannot replace the live session lock"
+
 # --- Flatpak app set ↔ default apps ----------------------------------------------------------------
 
 manifest="$D/usr/share/flatpak/preinstall.d/fenoa.preinstall"

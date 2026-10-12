@@ -9,7 +9,7 @@ Fenoa's session is Hyprland (Lua config) managed by uwsm, with Noctalia v5 as th
 | Compositor | `hyprland` (lionheartp/Hyprland COPR) | Lua config, 0.55+; started by uwsm from `hyprland-uwsm.desktop` |
 | Bar, launcher, control center, dock, desktop widgets | Noctalia | `uwsm-app -s s -- noctalia` from Hyprland's start hook |
 | Notifications, OSD | Noctalia | Noctalia owns `org.freedesktop.Notifications` |
-| Lock screen, idle | Noctalia | PAM service `login`; locks before suspend via a logind delay inhibitor; lock at 5 min, screen off at 5.5 min |
+| Lock screen, idle | Noctalia | PAM service `login`; locks before suspend via a logind delay inhibitor; lock at 5 min, screen off at 5.5 min; a second locker cannot replace the live lock (see [If the lock screen crashes](#if-the-lock-screen-crashes)) |
 | Polkit agent | Noctalia | `shell.polkit_agent = true`; Fenoa ships no other agent |
 | Keyring | gnome-keyring | unlocked with the login password (`/etc/pam.d/greetd`); Flatpak apps reach it through the Secret portal, which `/etc/xdg-desktop-portal/hyprland-portals.conf` routes to gnome-keyring because its portal only offers itself under GNOME (the other portals stay `hyprland`, then `gtk`) |
 | Clipboard history, screenshots, emoji, calculator | Noctalia | launcher providers `/emo`, `/calc`, `/win`, `/session`, `/wall` |
@@ -97,6 +97,16 @@ The Mac top row sends these without Fn (`hid_apple fnmode=1`).
 - **Noctalia:** `~/.config/noctalia/config.toml` (includes `/usr/share/fenoa/noctalia/fenoa.toml`); the Settings window saves to `~/.local/state/noctalia/settings.toml`, which wins. Check with `noctalia config validate`.
 - **Default apps:** `~/.config/mimeapps.list` overrides `/usr/share/applications/hyprland-mimeapps.list`.
 - **Session environment:** `/usr/share/uwsm/env.d/10-fenoa` sets the Wayland backends, cursor size, Qt/GTK theming, `TERMINAL`, `EDITOR` and Homebrew's `PATH` for the whole session (uwsm exports it to systemd and D-Bus activation too); add your own in `~/.config/uwsm/env`.
+
+## If the lock screen crashes
+
+Hyprland does not let a second locker replace a live session lock (`misc.allow_session_lock_restore = false` in `/usr/share/fenoa/hypr/fenoa/looknfeel.lua`): while the screen is locked, a client that starts its own lock cannot take over from Noctalia's lock screen and unlock. It does not protect against programs already running as you, which can turn the option back on with `hyprctl` exactly as step 2 below does. The flip side is that if Noctalia dies while the screen is locked, the session stays locked with nothing to type the password into. This is the procedure to recover it without logging out:
+
+1. Switch to a text console with `Ctrl + Alt + Fn + F2` (the top row sends media keys unless Fn is held, `hid_apple fnmode=1`) and log in as yourself.
+2. Let a new client take the lock over, for now: `hyprctl --instance 0 eval 'hl.config({ misc = { allow_session_lock_restore = true } })'` (`--instance 0` picks the first running Hyprland).
+3. Start Noctalia again: `hyprctl --instance 0 eval 'hl.exec_cmd("uwsm-app -s s -- noctalia")'`
+4. Ask it to lock, which replaces the dead lock: `loginctl lock-sessions` (with Noctalia running, logind's lock request goes through Noctalia's lock screen).
+5. Go back with `Ctrl + Alt + Fn + F1` and unlock. The setting reverts at the next config reload or login.
 
 ## The greeter
 
