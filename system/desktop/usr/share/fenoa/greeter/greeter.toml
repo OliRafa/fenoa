@@ -1,0 +1,8 @@
+# noctalia-greeter administrator config, linked to /var/lib/noctalia-greeter/greeter.toml by
+# /usr/lib/tmpfiles.d/fenoa-greeter.conf. Values here win over what Noctalia syncs into sync.toml,
+# so keep appearance out of it and let the sync carry the user's wallpaper and palette.
+# Reference: https://github.com/noctalia-dev/noctalia-greeter/blob/main/docs/user/configuration.md
+
+[session]
+# The uwsm-managed Hyprland session (hyprland-uwsm.desktop). `noctalia-greeter sessions` lists names.
+default = "Hyprland (uwsm-managed)"

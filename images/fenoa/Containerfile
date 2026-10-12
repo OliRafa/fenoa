@@ -198,3 +198,71 @@ RUN rm -rf /var/cache/dnf /var/cache/libdnf5 /var/lib/dnf/repos /var/lib/dnf/his
  && rm -f /var/log/dnf5.log* /var/log/dnf.log* /var/log/hawkey.log* \
  && rm -rf /run/dnf /tmp/* \
  && bootc container lint
+
+# ==================================================================================================
+# desktop — published as `fenoa`
+# ==================================================================================================
+FROM platform AS desktop
+
+# D1) Repositories.
+#     - lionheartp/Hyprland COPR: the Asahi-safe Hyprland stack with the 0.55+ Lua config this image
+#       uses. priority=10 makes it win over Fedora for the Hyprland packages; the exclude keeps it
+#       from replacing Fedora's GTK/Pango/Cairo.
+#     - Terra: the only Fedora 44 aarch64 build of noctalia-greeter (noctalia itself is in Fedora).
+#       terra-release is bootstrapped without a signature check, as Terra documents; it installs the
+#       repo's signing key, so everything installed from it afterwards is verified (dnf5 imports the
+#       key for repomd checks only when allowed to, hence the explicit `makecache -y`). A dnf5 repo
+#       override restricts Terra to noctalia-greeter, so it can never replace a Fedora package.
+#     Both are set through /etc/dnf/repos.override.d rather than by editing the shipped .repo files.
+RUN set -eux; \
+    dnf -y install dnf-plugins-core; \
+    dnf -y copr enable lionheartp/Hyprland; \
+    dnf -y install --nogpgcheck --repofrompath 'terra,https://repos.fyralabs.com/terra$releasever' terra-release; \
+    mkdir -p /etc/dnf/repos.override.d; \
+    printf '%s\n' '[copr:copr.fedorainfracloud.org:lionheartp:Hyprland]' 'priority=10' 'exclude=gtk4* gtk3* pango* cairo*' \
+      >/etc/dnf/repos.override.d/90-fenoa-hyprland.repo; \
+    printf '%s\n' '[terra]' 'includepkgs=noctalia-greeter' >/etc/dnf/repos.override.d/90-fenoa-terra.repo; \
+    dnf -y makecache --repo terra; \
+    dnf repoquery -q --repo terra --qf '%{name}\n' noctalia-greeter | grep -qx noctalia-greeter \
+      || { echo "[D1] Terra does not offer noctalia-greeter"; exit 1; }; \
+    dnf clean all
+
+# D2) Hyprland and its uwsm session file (hyprland-uwsm.desktop — the session the greeter starts).
+#     Prefer stable; fall back to -git when a soname bump leaves stable unresolvable. The COPR's
+#     mirrors flake often enough to retry each attempt before giving up.
+RUN retry() { n=1; while ! "$@"; do [ "$n" -ge 5 ] && return 1; echo "[dnf-retry] attempt $n failed: $*"; dnf clean all || true; sleep $((n*5)); n=$((n+1)); done; }; \
+    { retry dnf -y install hyprland hyprland-uwsm || retry dnf -y install hyprland-git hyprland-git-uwsm; } \
+ && dnf clean all
+
+# D3) Desktop packages: Noctalia, noctalia-greeter + greetd, portals, fonts, theming, a lean app set.
+COPY packages/desktop.packages /tmp/desktop.packages
+RUN retry() { n=1; while ! "$@"; do [ "$n" -ge 5 ] && return 1; echo "[dnf-retry] attempt $n failed: $*"; dnf clean all || true; sleep $((n*5)); n=$((n+1)); done; }; \
+    retry dnf -y install $(sed 's/#.*//' /tmp/desktop.packages | awk 'NF') \
+ && dnf clean all \
+ && rm -f /tmp/desktop.packages
+
+# D4) The desktop overlay: Hyprland defaults (/usr/share/fenoa/hypr) and Noctalia defaults
+#     (/usr/share/fenoa/noctalia) that the thin user configs in /etc/skel pull in; greetd + greeter
+#     config and its state-directory tmpfiles entry; the greeter-sync polkit rule; session
+#     environment, default terminal and default apps; the Flatpak app set; Apple-keyboard helpers.
+#     Copied after the packages so /etc/greetd/config.toml replaces the package's agreety default.
+COPY system/desktop/ /
+RUN set -eux; \
+    chmod 0755 /usr/bin/fenoa-kbd-backlight /usr/bin/fenoa-hypr-clamshell; \
+    getent passwd greetd >/dev/null || { echo "[D4] greetd's greeter account is missing"; exit 1; }; \
+    [ -x /usr/bin/noctalia-greeter-session ] || { echo "[D4] noctalia-greeter-session missing"; exit 1; }; \
+    [ -x /usr/bin/noctalia-greeter-apply-appearance ] || { echo "[D4] greeter sync helper missing"; exit 1; }; \
+    grep -qx 'Name=Hyprland (uwsm-managed)' /usr/share/wayland-sessions/hyprland-uwsm.desktop \
+      || { echo "[D4] the greeter's default session name no longer matches hyprland-uwsm.desktop"; exit 1; }
+
+# D5) Boot to the greeter. greetd aliases display-manager.service, which fenoa-firstboot-user is
+#     ordered before, so the first account exists by the time the greeter lists users.
+RUN set -eux; \
+    systemctl enable greetd.service; \
+    systemctl set-default graphical.target
+
+# D6) Clear build residue and lint.
+RUN rm -rf /var/cache/dnf /var/cache/libdnf5 /var/lib/dnf/repos /var/lib/dnf/history* \
+ && rm -f /var/log/dnf5.log* /var/log/dnf.log* /var/log/hawkey.log* \
+ && rm -rf /run/dnf /tmp/* \
+ && bootc container lint

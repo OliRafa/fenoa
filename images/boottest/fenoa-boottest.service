@@ -1,0 +1,16 @@
+[Unit]
+Description=Fenoa boot smoke test (on-device only)
+After=multi-user.target greetd.service NetworkManager.service fenoa-apply-m1n1.service
+Wants=greetd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Give the greeter time to bring up its compositor before checking for it.
+ExecStartPre=/usr/bin/sleep 20
+StandardOutput=journal+console
+StandardError=journal+console
+ExecStart=/usr/libexec/fenoa-boot-smoke
+
+[Install]
+WantedBy=multi-user.target

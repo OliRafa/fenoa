@@ -1,0 +1,16 @@
+# On-hardware boot-test overlay on top of a built Fenoa image. It adds a gated unit that runs
+# boot-smoke.sh at boot and reports over the console and journal — nothing test-related lands in a
+# published image.
+#
+#   podman build -t fenoa:44-boottest --build-arg BASE=fenoa:44 -f images/boottest/Containerfile .
+#
+# Deploy the -boottest image on a real Mac (bootc switch, or deploy/fenoa-install) and read the
+# verdict from `journalctl -u fenoa-boottest`: "BOOT SMOKE: PASS".
+ARG BASE=fenoa:44
+FROM ${BASE}
+
+COPY images/boottest/boot-smoke.sh /usr/libexec/fenoa-boot-smoke
+COPY images/boottest/fenoa-boottest.service /usr/lib/systemd/system/fenoa-boottest.service
+RUN chmod +x /usr/libexec/fenoa-boot-smoke \
+ && systemctl enable fenoa-boottest.service \
+ && bootc container lint

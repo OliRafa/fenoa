@@ -1,0 +1,36 @@
+# Fenoa's Noctalia defaults. ~/.config/noctalia/config.toml includes this file, so anything set
+# there — or changed in Settings, which writes ~/.local/state/noctalia/settings.toml — wins over it.
+# Reference: https://docs.noctalia.dev/noctalia/configuration/
+# Check a change with: noctalia config validate
+
+[shell]
+# Fenoa ships no other polkit agent: Noctalia answers authentication prompts (printer admin,
+# NetworkManager, the greeter appearance sync, ...).
+polkit_agent = true
+# Launch apps through uwsm so each gets its own scope in app.slice — the only place systemd-oomd is
+# allowed to kill (usr/lib/systemd/user/app.slice.d/10-fenoa-oomd.conf).
+launch_apps_custom_command = "uwsm-app -- $CMD"
+
+[shell.greeter_sync]
+# Copy wallpaper, palette, font and monitor layout to noctalia-greeter whenever they change. The
+# login-screen state lives in /var/lib/noctalia-greeter; members of wheel may sync without a password
+# (usr/share/polkit-1/rules.d/49-fenoa-greeter-sync.rules), everyone else gets an admin prompt.
+auto_sync = true
+
+[theme.templates]
+# Re-colour GTK apps (adw-gtk3), foot and Hyprland's borders from the current palette.
+enable_builtin_templates = true
+builtin_ids = ["gtk3", "gtk4", "foot", "hyprland"]
+
+[idle]
+behavior_order = ["lock", "screen-off"]
+
+[idle.behavior.lock]
+timeout = 300
+action = "lock"
+enabled = true
+
+[idle.behavior.screen-off]
+timeout = 330
+action = "screen_off"
+enabled = true

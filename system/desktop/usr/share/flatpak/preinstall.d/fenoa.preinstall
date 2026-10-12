@@ -1,0 +1,24 @@
+# Fenoa — GUI apps delivered from Flathub on first boot.
+#
+# A Fedora/flatpak-native "preinstall" manifest (see flatpak-preinstall(1)): fenoa-flatpak-preinstall
+# runs `flatpak preinstall -y` at startup and installs the groups below. The upstream CLI owns the
+# install logic, the idempotency and the opt-out: an app the user uninstalls is remembered and not
+# reinstalled. Branch=stable because that is Flathub's branch (the flatpak default, "master", does
+# not exist there and an unpinned group silently installs nothing).
+#
+# Kept deliberately lean; install anything else with `flatpak install flathub <app>`.
+
+# Browser. Run `fenoa-widevine` after its first start to enable DRM (Spotify, Netflix) on aarch64.
+[Flatpak Preinstall com.brave.Browser]
+Branch=stable
+IsRuntime=false
+
+# Image viewer.
+[Flatpak Preinstall org.gnome.Loupe]
+Branch=stable
+IsRuntime=false
+
+# PDF viewer.
+[Flatpak Preinstall org.gnome.Evince]
+Branch=stable
+IsRuntime=false

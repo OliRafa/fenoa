@@ -1,0 +1,78 @@
+# Fenoa — FAIRYDUST variant (Fedora Asahi · Apple Silicon / aarch64)
+#
+# FROM the fenoa image; swaps the stock Asahi kernel-16k for the experimental "fairydust" kernel
+# (AsahiLinux/linux `fairydust` branch — USB-C DisplayPort alt-mode on Apple Silicon MacBooks). The
+# kernel is NOT compiled here: it is built in the separate OliRafa/omarchy-fairydust-kernel repo and
+# published as a FROM-scratch context image holding only /usr/lib/modules/<kver>/ plus
+# /usr/lib/modules/fairydust.kver. After the swap the composefs initramfs is rebuilt against the new
+# kernel — the platform stage built it for the stock kernel, which this image removes.
+#
+# Everything else — desktop, systemd-boot, the m1n1/devicetree wiring, first-boot provisioning, the
+# Apple HID modprobe/dracut drop-ins — is inherited unchanged. The DTBS path update-m1n1 uses
+# (/usr/lib/modules/$(uname -r)/dtb) is version-agnostic and follows the new kernel; the kernel image
+# must ship its DTBs under dtb/apple/, which is where update-m1n1 looks.
+#
+# EXPERIMENTAL: fairydust is a dev branch and the kernel image tracks its HEAD. See docs/fairydust.md.
+#
+#   ./images/build.sh fenoa && ./images/build.sh fairydust
+#   FDK_IMAGE=ghcr.io/olirafa/omarchy-fairydust-kernel:44 ./images/build.sh fairydust
+
+ARG FDK_IMAGE=ghcr.io/olirafa/omarchy-fairydust-kernel:latest
+ARG BASE=fenoa
+ARG TAG=44
+
+FROM ${FDK_IMAGE} AS fairydust
+FROM ${BASE}:${TAG}
+
+# F1) Swap the kernel. Copy the fairydust tree in beside the stock one, then remove every other
+#     kernel tree so exactly one remains for the initramfs rebuild and the install to pick. rpm -e
+#     drops the kernel-16k RPMs (best-effort: asahi-platform-metapackage may hold the meta, so the
+#     directory sweep is the authoritative cleanup). No Secure Boot on the m1n1/U-Boot chain, so the
+#     kernel needs no signing.
+COPY --from=fairydust /usr/lib/modules /usr/lib/modules
+RUN set -eux; \
+    newkver="$(cat /usr/lib/modules/fairydust.kver)"; \
+    { [ -n "$newkver" ] && [ -e "/usr/lib/modules/$newkver/vmlinuz" ]; } \
+      || { echo "[F1] fairydust kernel tree missing or fairydust.kver empty"; exit 1; }; \
+    for p in $(rpm -qa 'kernel-16k*'); do echo "[F1] removing stock RPM: $p"; rpm -e --nodeps "$p" 2>/dev/null || true; done; \
+    for d in /usr/lib/modules/*/; do \
+      k="$(basename "$d")"; \
+      [ "$k" = "$newkver" ] && continue; \
+      echo "[F1] removing non-fairydust kernel tree: $k"; \
+      rm -rf "$d"; \
+    done; \
+    depmod -a "$newkver"; \
+    rm -f /usr/lib/modules/fairydust.kver; \
+    n="$(find /usr/lib/modules -maxdepth 2 -name vmlinuz | wc -l)"; \
+    [ "$n" = 1 ] || { echo "[F1] expected exactly one kernel after swap, found $n"; exit 1; }; \
+    echo "[F1] swapped to fairydust kernel $newkver"
+
+# F2) Rebuild the composefs initramfs against the fairydust kernel — the same step as the platform
+#     stage's P5 (keep them in sync): bootc's dracut module for the composefs root pivot, plus the
+#     Apple HID drivers from /usr/lib/dracut/dracut.conf.d/90-fenoa-apple-hid.conf. FAIL the build if
+#     either is missing; a built-in driver needs no module in the initramfs.
+RUN set -eux; \
+    export DRACUT_NO_XATTR=1 DRACUT_NO_MKNOD=1; \
+    kver="$(basename "$(dirname "$(find /usr/lib/modules -maxdepth 2 -name vmlinuz | head -1)")")"; \
+    moddir="$(ls -d /usr/lib/dracut/modules.d/*bootc 2>/dev/null | head -1)"; \
+    [ -n "$moddir" ] || { echo "[F2] no bootc dracut module — composefs installs cannot pivot"; exit 1; }; \
+    modname="$(basename "$moddir" | sed 's/^[0-9]*//')"; \
+    echo "[F2] rebuilding initramfs for $kver with dracut module '$modname' ($moddir)"; \
+    if [ -e /var/roothome ]; then roothome_made=0; else mkdir -p /var/roothome; roothome_made=1; fi; \
+    dracut --force --no-hostonly --reproducible --kver "$kver" \
+      --add "$modname" "/usr/lib/modules/$kver/initramfs.img"; \
+    if [ "$roothome_made" = 1 ]; then rmdir /var/roothome; fi; \
+    contents="$(lsinitrd "/usr/lib/modules/$kver/initramfs.img")"; \
+    echo "$contents" | grep -q 'bootc-root-setup\.service' \
+      || { echo "[F2] rebuilt initramfs lacks bootc-root-setup.service"; exit 1; }; \
+    for m in hid-apple hid-magicmouse; do \
+      if grep -q "/$m\.ko" "/usr/lib/modules/$kver/modules.builtin"; then echo "[F2] $m is built in"; continue; fi; \
+      echo "$contents" | grep -q "/$m\.ko" || { echo "[F2] initramfs lacks $m.ko (Apple HID early load)"; exit 1; }; \
+    done; \
+    echo "[F2] initramfs carries bootc composefs root setup + Apple HID drivers"
+
+# F3) Clear build residue and lint.
+RUN rm -rf /var/cache/dnf /var/cache/libdnf5 /var/lib/dnf/repos /var/lib/dnf/history* \
+ && rm -f /var/log/dnf5.log* /var/log/dnf.log* /var/log/hawkey.log* \
+ && rm -rf /run/dnf /tmp/* \
+ && bootc container lint

@@ -1,0 +1,61 @@
+#!/bin/bash
+
+# Step the keyboard backlight in 10% increments.
+#
+# Usage: fenoa-kbd-backlight up|down|off|cycle
+#
+# Apple Silicon keyboards expose the backlight as the LED class device kbd_backlight (0-255 on the
+# M1/M2 laptops). The Mac top row has no backlight keys, so Hyprland binds Shift + brightness here.
+# Noctalia has keyboard-backlight-up/down of its own that step "one level"; this keeps the 10% steps
+# known to work on the 0-255 Apple backlight and borrows Noctalia's keyboard OSD for feedback.
+
+set -euo pipefail
+
+direction="${1:-up}"
+
+leds_dir="${FENOA_LEDS_DIR:-/sys/class/leds}"
+
+device=""
+for candidate in "$leds_dir"/*kbd_backlight*; do
+  if [[ -e $candidate ]]; then
+    device="$(basename "$candidate")"
+    break
+  fi
+done
+
+if [[ -z $device ]]; then
+  echo "No keyboard backlight device found" >&2
+  exit 1
+fi
+
+max="$(brightnessctl -d "$device" max)"
+current="$(brightnessctl -d "$device" get)"
+
+# 10% of max, at least 1 (keyboards with few levels step one at a time).
+step=$(( max / 10 ))
+(( step < 1 )) && step=1
+
+case $direction in
+  up)
+    new=$(( current + step ))
+    (( new > max )) && new=$max
+    ;;
+  down)
+    new=$(( current - step ))
+    (( new < 0 )) && new=0
+    ;;
+  cycle)
+    new=$(( current + step ))
+    (( new > max )) && new=0
+    ;;
+  off)
+    new=0
+    ;;
+  *)
+    echo "usage: fenoa-kbd-backlight up|down|off|cycle" >&2
+    exit 2
+    ;;
+esac
+
+brightnessctl -q -d "$device" set "$new"
+noctalia msg keyboard-backlight-osd "$(( new * 100 / max ))" >/dev/null 2>&1 || true

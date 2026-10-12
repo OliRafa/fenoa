@@ -1,0 +1,54 @@
+# Fenoa desktop layer — Hyprland + Noctalia + noctalia-greeter, layered onto the platform stage.
+# Hyprland itself (and its uwsm session file) is installed separately with a stable → -git fallback;
+# see images/fenoa/Containerfile step D2.
+#
+# One package per line; text after `#` is ignored.
+
+# --- Compositor stack (lionheartp/Hyprland COPR + Fedora) ---
+uwsm
+xdg-desktop-portal
+xdg-desktop-portal-hyprland
+xdg-desktop-portal-gtk
+hyprland-qt-support
+hyprland-guiutils           # hyprland-dialog etc. (ANR / permission prompts)
+qt5-qtwayland
+qt6-qtwayland
+xdg-user-dirs
+xdg-utils
+wl-clipboard
+
+# --- Shell and login ---
+noctalia                    # Fedora: bar, launcher, notifications, OSD, lock, idle, polkit agent
+noctalia-greeter            # Terra (restricted to this one package)
+greetd                      # pulls greetd-selinux
+accountsservice             # avatars in the greeter
+gnome-keyring               # unlocked at login by /etc/pam.d/greetd
+libsecret
+ddcutil                     # Noctalia: brightness on DDC/CI external monitors
+
+# --- Theming (Noctalia's gtk3/gtk4 templates target adw-gtk3) ---
+adw-gtk3-theme
+adwaita-icon-theme
+adwaita-cursor-theme
+
+# --- Fonts ---
+google-noto-sans-fonts
+google-noto-sans-cjk-fonts
+google-noto-color-emoji-fonts
+jetbrains-mono-fonts
+
+# --- Apps (lean: terminal, files, media; browser and viewers are Flatpaks) ---
+foot
+xdg-terminal-exec
+nautilus
+gvfs-mtp
+gvfs-nfs
+gvfs-smb
+ffmpegthumbnailer
+mpv
+mpv-mpris                   # MPRIS bridge so Noctalia's media controls see mpv
+gstreamer1-plugins-good
+qt6-qtimageformats
+glycin-loaders
+nm-connection-editor        # VPN and advanced connection settings
+system-config-printer

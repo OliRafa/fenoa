@@ -1,0 +1,43 @@
+#!/bin/bash
+
+# Turn the internal panel off while the lid is closed and an external display is connected.
+#
+# Usage: fenoa-hypr-clamshell close|open
+#
+# Bound in Hyprland to the Apple Silicon lid switch ("Apple SMC power/lid events"). With no external
+# display, closing the lid leaves the panel alone and logind suspends as usual (an external display
+# makes logind treat the machine as docked and ignore the lid). On open the panel is re-enabled
+# explicitly — a runtime rule is not guaranteed to be dropped by a reload — and `hyprctl reload`
+# then re-applies the configured monitor rules, so a scale set in hyprland.lua still wins.
+
+set -euo pipefail
+
+action="${1:-}"
+if [[ $action != "close" && $action != "open" ]]; then
+  echo "usage: fenoa-hypr-clamshell close|open" >&2
+  exit 2
+fi
+
+internal_monitor() {
+  hyprctl monitors all -j | jq -r '.[] | select(.name | test("^(eDP|LVDS|DSI)-")) | .name' | head -n1
+}
+
+external_connected() {
+  hyprctl monitors -j | jq -e '[.[] | select(.name | test("^(eDP|LVDS|DSI)-") | not)] | length > 0' >/dev/null
+}
+
+internal="$(internal_monitor)"
+# The name ends up inside a Lua string; only accept plain connector names.
+[[ $internal =~ ^[A-Za-z0-9._-]+$ ]] || exit 0
+
+case $action in
+  close)
+    if external_connected; then
+      hyprctl eval "hl.monitor({ output = \"$internal\", disabled = true })" >/dev/null
+    fi
+    ;;
+  open)
+    hyprctl eval "hl.monitor({ output = \"$internal\", mode = \"preferred\", position = \"auto\", scale = \"auto\" })" >/dev/null
+    hyprctl reload >/dev/null
+    ;;
+esac

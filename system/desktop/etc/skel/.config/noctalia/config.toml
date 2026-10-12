@@ -1,0 +1,12 @@
+# Noctalia configuration. https://docs.noctalia.dev/noctalia/configuration/
+#
+# Fenoa's defaults live in /usr/share/fenoa/noctalia/fenoa.toml and update with the image. Settings
+# below the include win over them; changes made in Noctalia's Settings window are saved separately
+# to ~/.local/state/noctalia/settings.toml and win over both. Check with: noctalia config validate
+
+[include]
+files = ["/usr/share/fenoa/noctalia/fenoa.toml"]
+
+# Your settings, e.g.
+# [theme]
+# mode = "dark"

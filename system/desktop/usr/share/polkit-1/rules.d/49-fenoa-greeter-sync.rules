@@ -1,0 +1,19 @@
+// Let members of wheel sync their Noctalia appearance to the login screen without a password.
+//
+// This is the narrow rule noctalia-greeter documents for `noctalia-greeter passwordless-sync enable
+// <user>`, keyed on the wheel group instead of a user list because the image does not know its users
+// at build time. It matches only the packaged constrained action, which accepts exactly
+// `noctalia-greeter-apply-appearance --sync <staging dir>`, run as root, by an active local session.
+// Everyone else keeps the administrator prompt.
+polkit.addRule(function (action, subject) {
+  if (
+    action.id == "org.noctalia.greeter.sync-appearance" &&
+    action.lookup("program") == "/usr/bin/noctalia-greeter-apply-appearance" &&
+    action.lookup("user") == "root" &&
+    subject.local &&
+    subject.active &&
+    subject.isInGroup("wheel")
+  ) {
+    return polkit.Result.YES;
+  }
+});

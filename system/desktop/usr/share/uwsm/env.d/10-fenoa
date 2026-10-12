@@ -1,0 +1,16 @@
+# Session environment for the uwsm-managed Hyprland session. uwsm sources this (it does not read
+# /etc/profile.d), so anything apps launched from the shell need on PATH goes here too.
+
+# Homebrew: APPEND, so brew's binaries can never shadow system ones (the same rule as
+# /etc/profile.d/brew.sh for login shells).
+if [ -d /home/linuxbrew/.linuxbrew/bin ]; then
+  export PATH="${PATH}:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin"
+fi
+
+# Terminal for apps and the launcher's Terminal=true entries; xdg-terminal-exec picks foot from
+# /etc/xdg/hyprland-xdg-terminals.list.
+export TERMINAL=xdg-terminal-exec
+
+if command -v nvim >/dev/null 2>&1; then
+  export EDITOR=nvim VISUAL=nvim
+fi

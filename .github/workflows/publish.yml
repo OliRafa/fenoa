@@ -1,0 +1,134 @@
+name: Publish images (GHCR)
+
+# Build the fenoa and fenoa-fairydust bootc images, smoke-test them, push them to GHCR so
+# `bootc install` / `bootc switch` / `bootc upgrade` have something to pull, then cosign-sign them
+# (keyless, via GitHub OIDC). aarch64 runner — the images are Apple-Silicon / Fedora Asahi only.
+#
+#   ghcr.io/<owner>/fenoa:44             (Hyprland + Noctalia, stock Asahi kernel-16k)
+#   ghcr.io/<owner>/fenoa-fairydust:44   (the same with the fairydust kernel, FROM fenoa)
+#
+# Also tagged :44-<shortsha> (immutable) and :latest. The platform stage is built as part of fenoa
+# and never pushed on its own.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'images/**'
+      - 'system/**'
+      - 'packages/**'
+      - 'Brewfile'
+      - '.github/workflows/publish.yml'
+  schedule:
+    - cron: '0 6 * * 1'   # weekly rebuild to pick up base-image, kernel and security updates
+  workflow_dispatch:
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write        # cosign keyless (Fulcio/Rekor via GitHub OIDC)
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    env:
+      FEDORA: "44"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image refs (GHCR requires a lowercase namespace)
+        id: refs
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          {
+            echo "fenoa=ghcr.io/$owner/fenoa"
+            echo "fairydust=ghcr.io/$owner/fenoa-fairydust"
+            echo "sha=${GITHUB_SHA::12}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Free up runner disk (image builds are space-hungry)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Install podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends podman
+
+      # Rootless throughout: we only build, smoke-test and push, so no root container storage is
+      # needed and cosign/podman share the runner user's registry auth.
+      - name: Build fenoa
+        run: env ENGINE=podman FEDORA="$FEDORA" ./images/build.sh fenoa
+
+      - name: Smoke-test fenoa (never publish an image that fails them)
+        run: |
+          ./images/fenoa/hack/platform-smoke.sh "fenoa:$FEDORA"
+          ./images/fenoa/hack/desktop-smoke.sh "fenoa:$FEDORA"
+
+      - name: Build fenoa-fairydust (FROM fenoa; kernel swap)
+        run: env ENGINE=podman FEDORA="$FEDORA" ./images/build.sh fairydust
+
+      - name: Smoke-test fenoa-fairydust
+        run: |
+          ./images/fairydust/hack/smoke.sh "fenoa-fairydust:$FEDORA"
+          KERNEL=fairydust ./images/fenoa/hack/platform-smoke.sh "fenoa-fairydust:$FEDORA"
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Tag, push, and record digests
+        id: push
+        run: |
+          set -euo pipefail
+          fenoa="${{ steps.refs.outputs.fenoa }}"
+          fd="${{ steps.refs.outputs.fairydust }}"
+          sha="${{ steps.refs.outputs.sha }}"
+          push_one() {           # push_one <local> <remote-repo> <digestfile>
+            local local_tag="$1" repo="$2" df="$3"
+            for t in "$FEDORA" "$FEDORA-$sha" latest; do podman tag "$local_tag" "$repo:$t"; done
+            # A single push of the primary tag writes the digest; the alias tags share it.
+            podman push "$repo:$FEDORA" --digestfile "$df"
+            podman push "$repo:$FEDORA-$sha"
+            podman push "$repo:latest"
+            echo "  pushed $repo (digest $(cat "$df"))"
+          }
+          push_one "fenoa:$FEDORA"           "$fenoa" fenoa.digest
+          push_one "fenoa-fairydust:$FEDORA" "$fd"    fd.digest
+          {
+            echo "fenoa_ref=$fenoa@$(cat fenoa.digest)"
+            echo "fd_ref=$fd@$(cat fd.digest)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign images (keyless)
+        env:
+          COSIGN_YES: "true"
+        run: |
+          # cosign (go-containerregistry) reads the docker config, not podman's auth.json.
+          cosign login ghcr.io -u "${{ github.actor }}" -p "${{ secrets.GITHUB_TOKEN }}"
+          cosign sign "${{ steps.push.outputs.fenoa_ref }}"
+          cosign sign "${{ steps.push.outputs.fd_ref }}"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Published + signed"
+            echo ""
+            echo "- \`${{ steps.push.outputs.fenoa_ref }}\`"
+            echo "- \`${{ steps.push.outputs.fd_ref }}\`"
+            echo ""
+            echo "Tags: \`$FEDORA\`, \`$FEDORA-${{ steps.refs.outputs.sha }}\`, \`latest\`"
+          } >> "$GITHUB_STEP_SUMMARY"

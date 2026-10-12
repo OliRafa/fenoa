@@ -75,7 +75,8 @@ if [[ $DESKTOP == "1" ]]; then
   echo "== B) /etc/skel seeded the desktop config into the new home =="
   [[ -f $home/.config/hypr/hyprland.lua ]] && ok "~/.config/hypr/hyprland.lua" || no "~/.config/hypr/hyprland.lua missing — skel not seeded"
   [[ -f $home/.config/noctalia/config.toml ]] && ok "~/.config/noctalia/config.toml" || no "~/.config/noctalia/config.toml missing"
-  [[ -f $home/.config/mimeapps.list ]] && ok "~/.config/mimeapps.list" || no "~/.config/mimeapps.list missing"
+  owner="$(stat -c %U "$home/.config/hypr/hyprland.lua" 2>/dev/null || true)"
+  [[ $owner == "$U" ]] && ok "seeded config is owned by $U" || no "seeded config owned by '${owner:-?}', not $U"
 fi
 
 echo "== C) done marker, preseed shredded, idempotent re-run =="
