@@ -31,10 +31,13 @@ echo "== bootc install to-disk: $IMAGE =="
 loop=$(losetup -Pf --show "$disk")
 mnt="$WORKDIR/mnt"
 mkdir -p "$mnt/esp" "$mnt/root"
+# Runs as root: leave nothing root-owned behind in WORKDIR for an unprivileged caller to trip over.
 cleanup() {
   umount "$mnt/esp" 2>/dev/null || true
   umount "$mnt/root" 2>/dev/null || true
   losetup -d "$loop" 2>/dev/null || true
+  rmdir "$mnt/esp" "$mnt/root" "$mnt" 2>/dev/null || true
+  rm -f "$disk"
 }
 trap cleanup EXIT
 
@@ -69,6 +72,5 @@ check "$cfs" "/composefs deployment store present" "no /composefs (composefs dep
 check "$ost" "/ostree present" "no /ostree"
 check "$st" "/state present" "no /state"
 
-rm -f "$disk"
 if (( fail == 0 )); then echo "INSTALL-TO-DISK: PASS"; else echo "INSTALL-TO-DISK: FAIL"; fi
 exit "$fail"

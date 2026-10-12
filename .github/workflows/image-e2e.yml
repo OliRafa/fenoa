@@ -87,7 +87,7 @@ jobs:
       # image (/home is a symlink to /var/home there), hence /var/tmp.
       - name: bootc install to-filesystem — ESP preboot preservation (real bootc)
         run: |
-          rm -rf "$RUNNER_TEMP/out"
+          sudo rm -rf "$RUNNER_TEMP/out"   # the install-to-disk step ran as root
           sudo env ENGINE=podman bash deploy/tests/esp-bootc-integration.sh fenoa:44 /var/tmp/esp-int
 
       # The platform stage is no longer needed; reclaim its tag before the next build.
