@@ -63,7 +63,7 @@ Copies the fairydust kernel tree in, removes every other kernel, runs `depmod`, 
 
 ```
 ~/.config/hypr/hyprland.lua            (user; seeded from /etc/skel)
-  dofile /usr/share/fenoa/hypr/bootstrap.lua     module path + reload-safe requires
+  dofile /usr/share/fenoa/hypr/bootstrap.lua     puts the defaults on the module path
   require "fenoa"                                 /usr/share/fenoa/hypr/fenoa/*.lua
   ... user overrides ...
   require "noctalia" (guarded)                    ~/.config/hypr/noctalia.lua, rendered by Noctalia
@@ -74,7 +74,7 @@ Copies the fairydust kernel tree in, removes every other kernel, runs `depmod`, 
 ~/.local/state/noctalia/settings.toml  (Noctalia's Settings window; wins over both)
 ```
 
-Hyprland keeps one Lua state across `hyprctl reload`, so the bootstrap drops the `fenoa.*` and `noctalia` modules from `package.loaded` before they are required again; otherwise a reload would re-run none of the defaults.
+Each `hyprctl reload` runs the config in a fresh Lua state, so `require` loads the defaults (and Noctalia's palette module) again and their settings, bindings and rules are re-applied; the bootstrap only has to put `/usr/share/fenoa/hypr` on `package.path`.
 
 ## Boot and session flow
 
