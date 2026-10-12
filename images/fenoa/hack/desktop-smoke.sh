@@ -26,7 +26,7 @@ if rpm -q hyprland >/dev/null 2>&1 || rpm -q hyprland-git >/dev/null 2>&1; then 
 [[ -f /usr/share/wayland-sessions/hyprland-uwsm.desktop ]] && ok "hyprland-uwsm.desktop session" || no "uwsm session file missing"
 for p in uwsm noctalia noctalia-greeter greetd greetd-selinux accountsservice gnome-keyring xdg-desktop-portal-hyprland \
          xdg-desktop-portal-gtk adw-gtk3-theme foot xdg-terminal-exec nautilus mpv mpv-mpris wl-clipboard \
-         udiskie adobe-source-code-pro-fonts cascadia-mono-nf-fonts; do
+         udiskie wf-recorder adobe-source-code-pro-fonts cascadia-mono-nf-fonts; do
   rpm -q "$p" >/dev/null 2>&1 && ok "$p" || no "$p missing"
 done
 for p in sddm quickshell firefox; do

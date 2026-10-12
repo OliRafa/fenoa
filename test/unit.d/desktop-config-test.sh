@@ -200,7 +200,7 @@ pass "the Flatpak default apps in mimeapps are all preinstalled"
 packages="$ROOT/packages/desktop.packages"
 dupes=$(sed 's/#.*//' "$packages" | awk 'NF{print $1}' | sort | uniq -d)
 [[ -z $dupes ]] || fail "desktop.packages has no duplicates" "$dupes"
-for p in noctalia noctalia-greeter greetd uwsm adw-gtk3-theme foot udiskie adobe-source-code-pro-fonts cascadia-mono-nf-fonts; do
+for p in noctalia noctalia-greeter greetd uwsm adw-gtk3-theme foot udiskie wf-recorder adobe-source-code-pro-fonts cascadia-mono-nf-fonts; do
   sed 's/#.*//' "$packages" | awk 'NF{print $1}' | grep -qx "$p" || fail "desktop.packages installs $p"
 done
 if sed 's/#.*//' "$packages" | awk 'NF{print $1}' | grep -qxE 'sddm|quickshell'; then

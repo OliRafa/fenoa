@@ -30,7 +30,7 @@ On mutable Asahi, `update-m1n1` rewrites `<ESP>/m1n1/boot.bin` (m1n1 stage 2 + U
 
 - **Notch.** Fenoa leaves the Asahi default: the area beside the notch is not part of the framebuffer, so nothing can be hidden behind it. `options appledrm show_notch=1` would expose the full panel height, but then the bar has to be exactly as tall as the cutout on each model (14"/16" Pro: 64 physical rows; 13.6"/15" Air: 56) and must keep its centre clear. Revisit if the bar ever learns to size itself to the notch.
 - **Direct scanout** is disabled in Hyprland (`render.direct_scanout = 0`) to avoid fullscreen artifacts seen on Asahi.
-- **Screen recording.** gpu-screen-recorder fails on the Asahi GPU ("unknown gpu vendor: Mesa"); use `wf-recorder`.
+- **Screen recording.** gpu-screen-recorder fails on the Asahi GPU ("unknown gpu vendor: Mesa"); the image ships `wf-recorder` instead, and OBS Studio is installed as a Flatpak on first boot.
 
 ## Audio
 
