@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# Run every test/unit.d/*-test.sh. Hermetic: no root, no container, no network — runnable on any
+# Linux host (CI uses ubuntu). A test file exits at its first failed assertion; this runner keeps
+# going so one failure doesn't hide the files after it.
+
+set -euo pipefail
+
+ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+TEST_DIR="$ROOT/test/unit.d"
+
+shopt -s nullglob
+tests=()
+for test in "$TEST_DIR"/*-test.sh; do
+  [[ $(basename "$test") == "base-test.sh" ]] && continue
+  tests+=("$test")
+done
+shopt -u nullglob
+
+if (( ${#tests[@]} == 0 )); then
+  echo "No unit tests found in $TEST_DIR" >&2
+  exit 1
+fi
+
+failed=()
+for test in "${tests[@]}"; do
+  printf '==> %s\n' "${test#"$ROOT"/}"
+  bash "$test" || failed+=("${test#"$ROOT"/}")
+done
+
+if (( ${#failed[@]} > 0 )); then
+  printf '\n%d of %d test files failed:\n' "${#failed[@]}" "${#tests[@]}" >&2
+  printf '  %s\n' "${failed[@]}" >&2
+  exit 1
+fi
+
+printf '\nAll %d test files passed.\n' "${#tests[@]}"

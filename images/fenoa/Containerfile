@@ -1,0 +1,200 @@
+# Fenoa — Fedora Noctalia Atomic (Fedora Asahi Remix · Apple Silicon / aarch64)
+#
+# Two stages, built in order:
+#
+#   platform  Fedora Asahi base-atomic + everything Apple Silicon needs to run as a bootc OS:
+#             systemd-boot, a composefs-capable initramfs, m1n1/devicetree refresh, first-boot user
+#             creation, Flatpak/Homebrew provisioning, system tuning. No desktop. Built and
+#             smoke-tested in CI (`--target platform`), never published on its own.
+#   desktop   FROM platform: Hyprland + Noctalia shell + noctalia-greeter (greetd). This is the
+#             published `fenoa` image. images/fairydust/Containerfile swaps its kernel.
+#
+# Build on a native aarch64 host (see images/build.sh):
+#   ./images/build.sh platform     # -> fenoa-platform:44 (local only)
+#   ./images/build.sh fenoa        # -> fenoa:44
+
+ARG BASE=quay.io/fedora-asahi-remix-atomic-desktops/base-atomic
+ARG FEDORA=44
+
+# Homebrew comes from Universal Blue's brew image — the same one Bluefin and Bazzite consume. It is
+# a `FROM scratch` context image holding only /system_files: a prebuilt, zstd-compressed Homebrew
+# tree at /usr/share/homebrew.tar.zst plus the units and shell hooks that manage it. Built for both
+# amd64 and arm64, so the aarch64 tree we need is the one we get.
+#
+# Taking the prebuilt tree rather than running Homebrew's installer at first boot is the point:
+# every brew failure seen on this platform was a first-boot network failure, and one was invisible
+# because `bash -c "$(curl ...)"` exits 0 when the curl fails.
+#
+# NOTE: this is a third-party image baked into the OS — a real trust dependency. Pin BREW_IMAGE to a
+# digest if that tradeoff ever needs tightening.
+ARG BREW_IMAGE=ghcr.io/ublue-os/brew:latest
+FROM ${BREW_IMAGE} AS brew
+
+# ==================================================================================================
+# platform
+# ==================================================================================================
+FROM ${BASE}:${FEDORA} AS platform
+
+# P1) Platform packages. The base already carries the Asahi kernel (kernel-16k), Apple firmware,
+#     m1n1/U-Boot glue, dracut and the Asahi audio DSP stack; packages/platform.packages adds the
+#     system services. Inline comments and blank lines are stripped. Fedora mirrors flake often
+#     enough on CI to retry (clean metadata + linear backoff) before giving up.
+COPY packages/platform.packages /tmp/platform.packages
+RUN retry() { n=1; while ! "$@"; do [ "$n" -ge 5 ] && return 1; echo "[dnf-retry] attempt $n failed: $*"; dnf clean all || true; sleep $((n*5)); n=$((n+1)); done; }; \
+    retry dnf -y install $(sed 's/#.*//' /tmp/platform.packages | awk 'NF') \
+ && dnf clean all \
+ && rm -f /tmp/platform.packages
+
+# P2) Drop the browser inherited from the base. base-atomic ships Firefox; Fenoa's browser is the
+#     Brave Flatpak (desktop stage manifest), so a native Firefox is dead weight and a second,
+#     unthemed browser. Best-effort: if a dependency ever holds it, log and continue.
+RUN { dnf -y remove firefox firefox-langpacks 2>/dev/null || true; } \
+ && for p in firefox firefox-langpacks; do \
+      rpm -q "$p" >/dev/null 2>&1 && echo "[P2] KEPT (held by a dependency): $p" || echo "[P2] removed: $p"; \
+    done \
+ && dnf clean all
+
+# P3) Bootloader: systemd-boot; drop the tooling we don't use.
+#     - bootc selects systemd-boot when bootupd is ABSENT (and we pass --bootloader systemd at
+#       install). bootupd manages GRUB/shim only — never systemd-boot — so it's unused here.
+#     - rpm-ostree is package layering; the composefs backend uses composefs-rs, not rpm-ostree.
+#     Removal is best-effort: anything held by asahi-platform-metapackage stays but is inert
+#     (--bootloader systemd is authoritative). On Asahi the chain is m1n1 → U-Boot (UEFI) →
+#     /EFI/BOOT/BOOTAA64.EFI (systemd-boot) → kernel; the devicetree comes from m1n1, not here.
+#
+#     Then mask grub2's boot-success units. They ship with grub2-common — which survives because
+#     asahi-platform-metapackage holds it — and record a successful boot by writing a grubenv via
+#     grub2-editenv. Under systemd-boot there is no grubenv, so they fail and the desktop reports
+#     "Failed unit detected: grub-boot-success.service" on every login. `systemctl mask` works on
+#     units that do not exist, so this is safe if grub2-common ever goes.
+RUN set -eux; \
+    { dnf -y remove rpm-ostree bootupd grub2-efi-aa64 grub2-efi-aa64-modules 2>/dev/null || true; }; \
+    for p in rpm-ostree bootupd grub2-efi-aa64; do \
+      rpm -q "$p" >/dev/null 2>&1 && echo "[P3] KEPT (held by a dependency): $p" || echo "[P3] removed: $p"; \
+    done; \
+    dnf clean all; \
+    systemctl --global mask grub-boot-success.timer grub-boot-success.service; \
+    systemctl mask grub-boot-indeterminate.service; \
+    for u in /etc/systemd/user/grub-boot-success.timer \
+             /etc/systemd/user/grub-boot-success.service \
+             /etc/systemd/system/grub-boot-indeterminate.service; do \
+      [ "$(readlink -f "$u")" = /dev/null ] || { echo "[P3] $u is not masked"; exit 1; }; \
+    done
+
+# P4) The platform overlay: first-boot/m1n1/provisioning units and helpers, system tuning drop-ins,
+#     and the Apple HID modprobe/dracut configuration. Copied AFTER the package install so the
+#     packages' %config files (cups-browsed.conf, faillock.conf) are replaced rather than left as
+#     .rpmnew, and BEFORE P5 so the initramfs picks up the dracut and modprobe drop-ins.
+COPY system/platform/ /
+RUN chmod 0755 /usr/libexec/fenoa-* /usr/bin/fenoa-* /usr/lib/systemd/system-sleep/fenoa-* \
+ && chmod 0440 /etc/sudoers.d/fenoa-* \
+ && visudo -cf /etc/sudoers.d/fenoa-passwd-tries
+
+# P5) composefs boot: rebuild the initramfs with bootc's dracut module.
+#     The base image's initramfs is built for the OSTREE backend: it ships ostree-prepare-root.service
+#     gated on ConditionKernelCommandLine=ostree and nothing that reads `composefs=`. Install with
+#     --composefs-backend against that and the boot entry carries composefs=<digest> that no
+#     initramfs component consumes — the kernel mounts root= directly and you boot the IMAGE's kernel
+#     against whatever /usr is already on the disk (observed on hardware: emergency mode).
+#
+#     bootc ships /usr/lib/dracut/modules.d/51bootc (module `bootc`) which installs
+#     /usr/lib/bootc/initramfs-setup + bootc-root-setup.service. Rebuild
+#     /usr/lib/modules/<kver>/initramfs.img with it — exactly what the composefs install copies to
+#     <ESP>/EFI/Linux/bootc_composefs-<digest>/initrd — and FAIL the build if the result lacks the
+#     unit, or lacks the Apple HID drivers usr/lib/dracut/dracut.conf.d/90-fenoa-apple-hid.conf
+#     forces in (the trackpad boot race fix; see docs/asahi.md).
+#
+#     DRACUT_NO_XATTR / DRACUT_NO_MKNOD: dracut sets these itself when it detects a container; that
+#     detection does not fire here, and the xattr copy failures would otherwise log once per file.
+#     /var/roothome: /root is a symlink to var/roothome and /var is empty in the image, so
+#     dracut-install dies on the dangling link; create it for the run only, keeping /var empty for
+#     `bootc container lint`. images/fairydust/Containerfile repeats this step for its kernel.
+RUN set -eux; \
+    export DRACUT_NO_XATTR=1 DRACUT_NO_MKNOD=1; \
+    kver="$(basename "$(dirname "$(find /usr/lib/modules -maxdepth 2 -name vmlinuz | head -1)")")"; \
+    moddir="$(ls -d /usr/lib/dracut/modules.d/*bootc 2>/dev/null | head -1)"; \
+    [ -n "$moddir" ] || { echo "[P5] no bootc dracut module — composefs installs cannot pivot"; exit 1; }; \
+    modname="$(basename "$moddir" | sed 's/^[0-9]*//')"; \
+    echo "[P5] rebuilding initramfs for $kver with dracut module '$modname' ($moddir)"; \
+    if [ -e /var/roothome ]; then roothome_made=0; else mkdir -p /var/roothome; roothome_made=1; fi; \
+    dracut --force --no-hostonly --reproducible --kver "$kver" \
+      --add "$modname" "/usr/lib/modules/$kver/initramfs.img"; \
+    if [ "$roothome_made" = 1 ]; then rmdir /var/roothome; fi; \
+    contents="$(lsinitrd "/usr/lib/modules/$kver/initramfs.img")"; \
+    echo "$contents" | grep -q 'bootc-root-setup\.service' \
+      || { echo "[P5] rebuilt initramfs lacks bootc-root-setup.service"; exit 1; }; \
+    for m in hid-apple hid-magicmouse; do \
+      if grep -q "/$m\.ko" "/usr/lib/modules/$kver/modules.builtin"; then echo "[P5] $m is built in"; continue; fi; \
+      echo "$contents" | grep -q "/$m\.ko" || { echo "[P5] initramfs lacks $m.ko (Apple HID early load)"; exit 1; }; \
+    done; \
+    echo "[P5] initramfs carries bootc composefs root setup + Apple HID drivers"
+
+# P6) Asahi + atomic: update-m1n1 is a MANUAL step on bootc, and by default reads the STATIC
+#     devicetree in /boot rather than the image's — so a kernel devicetree change (the 6.19 USB DT,
+#     the fairydust DP-alt DT) boots stale and breaks hardware. Point DTBS at the image's devicetree
+#     (update-m1n1 globs $DTBS/apple/t*.dtb) and enable fenoa-apply-m1n1.service, which runs
+#     update-m1n1 once per kernel. A no-op on non-Asahi machines (the helper self-skips).
+RUN set -eux; \
+    mkdir -p /etc/sysconfig; f=/etc/sysconfig/update-m1n1; touch "$f"; \
+    if grep -q '^DTBS=' "$f"; then \
+      sed -i 's|^DTBS=.*|DTBS="/usr/lib/modules/$(uname -r)/dtb"|' "$f"; \
+    else \
+      printf 'DTBS="/usr/lib/modules/$(uname -r)/dtb"\n' >>"$f"; \
+    fi; \
+    systemctl enable fenoa-apply-m1n1.service
+
+# P7) First-boot user provisioning. The image ships no human user and a composefs
+#     `to-existing-root` convert does NOT import the underlying OS's user, so the greeter would have
+#     no account to offer. fenoa-firstboot-user creates the primary user once (preseed via
+#     /etc/fenoa/firstboot-user.conf, else an interactive tty1 prompt), ordered before the display
+#     manager. systemd-firstboot handles root password / locale / timezone / hostname.
+RUN set -eux; \
+    systemctl enable fenoa-firstboot-user.service; \
+    systemctl enable systemd-firstboot.service 2>/dev/null || true
+
+# P8) Homebrew + Flatpak first-boot provisioning. Neither can live in /usr as a working install:
+#     Homebrew needs a writable prefix owned by a human user, and Flatpaks live in /var/lib/flatpak,
+#     which bootc only seeds on first boot.
+#
+#     Homebrew is only UNPACKED at first boot: ublue's brew-setup.service extracts
+#     /usr/share/homebrew.tar.zst into /home/linuxbrew, and brew-update.timer / brew-upgrade.timer
+#     keep it current afterwards. fenoa-brew-setup.service re-owns the prefix to the real primary
+#     user and applies /usr/share/fenoa/Brewfile, retrying until it succeeds.
+#
+#     Flatpaks use Fedora/flatpak's upstream `flatpak preinstall` (manifests under
+#     /usr/share/flatpak/preinstall.d — the desktop stage ships the app set). The Flathub remote is
+#     baked in as a LOCAL file so `remote-add` at first boot needs no DNS (NetworkManager-wait-online
+#     is masked below, so network-online.target is reached before the network is up); the build
+#     fails rather than ship an image whose remote step is back on the network. Masking
+#     flatpak-add-fedora-repos.service keeps Flathub the only enabled remote.
+COPY --from=brew /system_files/ /
+COPY Brewfile /usr/share/fenoa/Brewfile
+RUN set -eux; \
+    [ -s /usr/share/homebrew.tar.zst ] || { echo "[P8] brew image shipped no homebrew.tar.zst"; exit 1; }; \
+    command -v flatpak >/dev/null || { echo "[P8] flatpak (for the preinstall CLI) not installed"; exit 1; }; \
+    mkdir -p /etc/flatpak/remotes.d; \
+    curl --retry 3 --retry-delay 2 -fL -o /etc/flatpak/remotes.d/flathub.flatpakrepo \
+      https://dl.flathub.org/repo/flathub.flatpakrepo; \
+    [ -s /etc/flatpak/remotes.d/flathub.flatpakrepo ] || { echo "[P8] failed to bake flathub.flatpakrepo"; exit 1; }; \
+    systemctl mask flatpak-add-fedora-repos.service; \
+    systemctl enable fenoa-flatpak-preinstall.service fenoa-flatpak-update.timer fenoa-brew-setup.service; \
+    systemctl enable brew-setup.service brew-update.timer brew-upgrade.timer
+
+# P9) System services. Nothing in the session needs to block on the network, so mask
+#     NetworkManager-wait-online and let network-online.target pass without waiting for DHCP/Wi-Fi
+#     association; the first-boot provisioning units retry on their own instead. systemd-oomd's
+#     [Install] pulls in systemd-oomd.socket, which the user manager reports app.slice candidacy over.
+RUN set -eux; \
+    systemctl enable NetworkManager.service bluetooth.service firewalld.service \
+      systemd-resolved.service avahi-daemon.service power-profiles-daemon.service \
+      cups.service cups-browsed.service docker.socket systemd-oomd.service fstrim.timer; \
+    systemctl mask NetworkManager-wait-online.service
+
+# P10) Clear build residue so the stage is bootc-clean (no content in /run, /tmp, /var/log or dnf
+#      caches — these trip the nonempty-run-tmp / var-log / var-tmpfiles lints). Target specific
+#      residue dirs, not /run/* wholesale: the build engine bind-mounts
+#      /run/systemd/resolve/stub-resolv.conf for build DNS, which cannot be removed.
+RUN rm -rf /var/cache/dnf /var/cache/libdnf5 /var/lib/dnf/repos /var/lib/dnf/history* \
+ && rm -f /var/log/dnf5.log* /var/log/dnf.log* /var/log/hawkey.log* \
+ && rm -rf /run/dnf /tmp/* \
+ && bootc container lint

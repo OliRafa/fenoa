@@ -1,0 +1,77 @@
+name: Image e2e
+
+# Builds the image from source, runs the container smoke tests, and validates a real
+# `bootc install to-disk` (composefs-native + systemd-boot — the shipping bootloader) by
+# loopback-mounting the installed disk. aarch64 runner because the image is Apple-Silicon /
+# Fedora Asahi only.
+#
+# Not covered here (needs a real Mac): the physical boot and first-boot service execution — the
+# Asahi kernel won't boot in generic qemu. That's the on-hardware images/boottest/ harness.
+on:
+  push:
+    paths:
+      - 'images/**'
+      - 'system/**'
+      - 'packages/**'
+      - 'deploy/**'
+      - 'Brewfile'
+      - '.github/workflows/image-e2e.yml'
+  pull_request:
+    paths:
+      - 'images/**'
+      - 'system/**'
+      - 'packages/**'
+      - 'deploy/**'
+      - 'Brewfile'
+      - '.github/workflows/image-e2e.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: image-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free up runner disk (image builds + bootc install-to-disk are space-hungry)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Install podman + disk tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends podman btrfs-progs dosfstools gdisk
+
+      # Rootful podman throughout: `bootc install` reads the image from /var/lib/containers, so the
+      # image must be built into root storage (sudo) and the scripts run under sudo.
+      - name: Build the platform stage (bootc container lint runs in-build)
+        run: sudo env ENGINE=podman ./images/build.sh platform
+
+      - name: Platform smoke test
+        run: sudo env ENGINE=podman ./images/fenoa/hack/platform-smoke.sh fenoa-platform:44
+
+      - name: First-boot user e2e (platform)
+        run: sudo env ENGINE=podman ./images/fenoa/hack/first-boot.sh fenoa-platform:44
+
+      - name: bootc install to-disk (composefs + systemd-boot) + deploy assertions
+        run: sudo env ENGINE=podman ./images/fenoa/hack/install-to-disk.sh fenoa-platform:44 "$RUNNER_TEMP/out"
+
+      # Real-bootc proxy for the install wrapper: `bootc install to-filesystem` onto a loopback disk
+      # whose ESP is pre-populated like a real Asahi ESP. Proves esp_backup/esp_restore preserve the
+      # preboot layer around an ACTUAL install. The work dir must be a real directory inside the
+      # image (/home is a symlink to /var/home there), hence /var/tmp.
+      - name: bootc install to-filesystem — ESP preboot preservation (real bootc)
+        run: |
+          rm -rf "$RUNNER_TEMP/out"
+          sudo env ENGINE=podman bash deploy/tests/esp-bootc-integration.sh fenoa-platform:44 /var/tmp/esp-int

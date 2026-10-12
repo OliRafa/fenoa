@@ -1,0 +1,6 @@
+# Kyber keeps reads in their own queue and throttles the depth it submits to hold a 2ms read latency
+# target, so interactive reads keep flowing while a large build, copy, or image pull floods the disk
+# with writes. The kernel's own pick (none or mq-deadline, depending on the device) does not regulate
+# latency once the queue fills. Whole disks only: partitions have no scheduler of their own, and zram
+# is memory with nothing to schedule.
+ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", KERNEL=="nvme*|sd*|mmcblk*|vd*", ATTR{queue/scheduler}="kyber"

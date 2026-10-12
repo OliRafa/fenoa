@@ -1,0 +1,74 @@
+#!/bin/bash
+# Real `bootc install to-disk` of an image onto a loopback file, then inspect the result by mounting
+# it: systemd-boot on the ESP (no GRUB), a kernel staged under EFI/Linux, and the composefs-native
+# deployment root (/composefs, /ostree, /state). This is the shipping install path, minus the Asahi
+# preboot layer (deploy/tests/esp-bootc-integration.sh covers that).
+#
+# Needs root, loop devices and rootful podman with the image in /var/lib/containers:
+#   sudo ./images/fenoa/hack/install-to-disk.sh [IMAGE] [WORKDIR]
+set -euo pipefail
+IMAGE="${1:-fenoa:44}"
+WORKDIR="${2:-/var/tmp/fenoa-install-to-disk}"
+ENGINE="${ENGINE:-podman}"
+
+mkdir -p "$WORKDIR"
+disk="$WORKDIR/disk.raw"
+rm -f "$disk"
+truncate -s 20G "$disk"
+
+echo "== bootc install to-disk: $IMAGE =="
+"$ENGINE" run --rm --privileged --pid=host \
+  --security-opt label=type:unconfined_t \
+  -v /var/lib/containers:/var/lib/containers -v /dev:/dev \
+  -v "$WORKDIR":/output \
+  "$IMAGE" \
+  bootc install to-disk \
+    --composefs-backend --bootloader systemd --filesystem btrfs \
+    --generic-image --via-loopback --wipe /output/disk.raw
+
+# Inspect by loopback mount (no libguestfs — its qemu appliance won't launch on the arm runner).
+# p1 = ESP (vfat), p2 = root (btrfs).
+loop=$(losetup -Pf --show "$disk")
+mnt="$WORKDIR/mnt"
+mkdir -p "$mnt/esp" "$mnt/root"
+cleanup() {
+  umount "$mnt/esp" 2>/dev/null || true
+  umount "$mnt/root" 2>/dev/null || true
+  losetup -d "$loop" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+sd=0 grub=0 kern=0 cfs=0 ost=0 st=0
+
+mount "${loop}p1" "$mnt/esp"
+echo "--- ESP /EFI ---"
+find "$mnt/esp/EFI" -maxdepth 3 -print 2>/dev/null || true
+[[ -e $mnt/esp/EFI/systemd/systemd-bootaa64.efi || -e $mnt/esp/EFI/BOOT/BOOTAA64.EFI ]] && sd=1
+[[ -e $mnt/esp/EFI/fedora/grubaa64.efi ]] && grub=1
+[[ -n "$(find "$mnt/esp/EFI/Linux" -name vmlinuz 2>/dev/null | head -1)" ]] && kern=1
+umount "$mnt/esp"
+
+mount "${loop}p2" "$mnt/root"
+echo "--- deployment root ---"
+ls -a "$mnt/root" 2>/dev/null | head
+# composefs-native backend root layout: composefs/ ostree/ state/ (NOT the classic
+# /ostree/repo + /ostree/deploy + .bootc-aleph.json-at-root).
+[[ -d $mnt/root/composefs ]] && cfs=1
+[[ -d $mnt/root/ostree ]] && ost=1
+[[ -d $mnt/root/state ]] && st=1
+umount "$mnt/root"
+
+fail=0
+check() { # check <ok> <pass message> <fail message>
+  if (( $1 )); then echo "OK: $2"; else echo "FAIL: $3"; fail=1; fi
+}
+check "$sd" "systemd-boot on ESP" "systemd-boot missing from ESP"
+check "$(( ! grub ))" "no grub on ESP" "grub present on ESP"
+check "$kern" "kernel staged on ESP" "no kernel on ESP"
+check "$cfs" "/composefs deployment store present" "no /composefs (composefs deploy incomplete)"
+check "$ost" "/ostree present" "no /ostree"
+check "$st" "/state present" "no /state"
+
+rm -f "$disk"
+if (( fail == 0 )); then echo "INSTALL-TO-DISK: PASS"; else echo "INSTALL-TO-DISK: FAIL"; fi
+exit "$fail"

@@ -1,0 +1,39 @@
+[Unit]
+Description=Fenoa first-boot primary user provisioning
+Documentation=man:bootc(8)
+# Gate on OUR marker, not systemd's ConditionFirstBoot.
+#
+# ConditionFirstBoot=yes silently skips on real hardware: systemd latches "first boot" from an
+# empty /etc/machine-id at boot start, nothing in the image build guarantees one is shipped empty,
+# and a composefs deployment takes /etc from the image with whatever machine-id it carries. The
+# condition comes out false, the unit never runs, getty keeps tty1, and the greeter comes up with
+# no account to offer — a dead end with no way in.
+#
+# bootc gives each deployment a fresh /var, so a marker there still means "this deployment has not
+# been provisioned yet", and the helper writes it only once a human user actually exists — an
+# aborted prompt or a failed useradd therefore retries on the next boot rather than latching off.
+ConditionPathExists=!/var/lib/fenoa/firstboot-user.done
+# systemd-firstboot handles root password / locale / timezone / hostname first; then we add the
+# human user. Must finish BEFORE the greeter (greetd aliases display-manager.service) so it has an
+# account to offer.
+After=systemd-firstboot.service systemd-user-sessions.service
+Wants=systemd-firstboot.service
+Before=display-manager.service
+# The interactive fallback needs tty1, so take it from getty for the duration.
+After=getty@tty1.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Optional per-machine preseed (KEY=VALUE); absent ⇒ interactive prompt on tty1.
+ExecStart=/usr/libexec/fenoa-firstboot-user
+StandardInput=tty-force
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+
+[Install]
+WantedBy=multi-user.target

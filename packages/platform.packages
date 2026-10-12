@@ -1,0 +1,78 @@
+# Fenoa platform layer — Fedora/Asahi system packages layered onto
+# quay.io/fedora-asahi-remix-atomic-desktops/base-atomic. The base already carries the Asahi
+# kernel (kernel-16k), Apple firmware, m1n1/U-Boot glue, dracut, and the Asahi audio stack
+# (asahi-audio, speakersafetyd, the lv2 DSP plugins); this list adds what a bootc laptop OS needs
+# on top. No desktop here — packages/desktop.packages layers that.
+#
+# One package per line; text after `#` is ignored (images/fenoa/Containerfile strips it).
+
+# --- Boot: systemd-boot replaces GRUB on this image (see images/fenoa/Containerfile step P3) ---
+systemd-boot-unsigned
+
+# --- Apple Silicon extras the base does not pull in ---
+tiny-dfr                    # Touch Bar function-row daemon (MacBook Pro 13" M1/M2)
+widevine-installer          # aarch64 Widevine CDM fetcher; see fenoa-widevine
+mesa-vulkan-drivers         # Honeykrisp (Asahi Vulkan); Arch's vulkan-asahi lives here on Fedora
+
+# --- Networking ---
+NetworkManager
+NetworkManager-tui
+wpa_supplicant              # NM's Wi-Fi backend on Fedora Asahi (brcmfmac); iwd is not used
+wireless-regdb
+firewalld
+avahi
+nss-mdns
+
+# --- Bluetooth ---
+bluez
+
+# --- Audio (PipeWire; the Asahi DSP comes from asahi-audio in the base) ---
+pipewire-pulseaudio
+pipewire-alsa
+wireplumber
+pulseaudio-utils
+alsa-utils
+rtkit
+
+# --- Power ---
+power-profiles-daemon
+upower
+brightnessctl               # keyboard backlight (fenoa-kbd-backlight); the shell drives the panel itself
+zram-generator
+bolt
+
+# --- Printing (driverless/IPP Everywhere; see /etc/cups/cups-browsed.conf) ---
+cups
+cups-browsed
+cups-filters
+cups-pk-helper              # PolicyKit-authenticated printer administration
+
+# --- Storage ---
+btrfs-progs
+dosfstools
+exfatprogs
+
+# --- Containers ---
+moby-engine
+docker-compose
+docker-buildx
+
+# --- Provisioning (first-boot Flatpak preinstall; Homebrew ships prebuilt from ublue's image) ---
+flatpak
+
+# --- Console and base CLI ---
+plymouth
+terminus-fonts-console
+sudo
+less
+man-db
+vim-minimal                 # provides `vi` for $EDITOR fallbacks
+unzip
+wget2-wget
+util-linux-script
+plocate
+git
+jq
+python3-pip
+inotify-tools
+socat

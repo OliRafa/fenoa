@@ -1,0 +1,21 @@
+[Unit]
+Description=Apply the Fenoa Brewfile (first boot)
+# Homebrew ships prebuilt in the image; ublue's brew-setup.service unpacks it into /home/linuxbrew.
+# This only re-owns that prefix to the detected primary user and applies our Brewfile, so it must
+# run after both the unpack and the account creation. Ordering only — if either has not happened
+# the helper says so and retries next boot, rather than being silently skipped by a Requires=.
+After=brew-setup.service
+After=fenoa-firstboot-user.service
+After=network-online.target
+Wants=network-online.target
+# Retries each boot until a primary user exists and the bundle succeeds.
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# brew bundle can take a while on first boot (some aarch64 formulae build from source).
+TimeoutStartSec=infinity
+ExecStart=/usr/libexec/fenoa-brew-setup
+
+[Install]
+WantedBy=multi-user.target

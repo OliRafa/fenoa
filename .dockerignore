@@ -1,0 +1,10 @@
+# The image build only COPYs packages/, system/ and Brewfile. Keep the context small.
+.git
+.github
+deploy
+docs
+test
+*.md
+*.raw
+*.tar
+*.log

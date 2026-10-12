@@ -1,0 +1,150 @@
+#!/bin/bash
+
+# Install the Google Widevine CDM so DRM sites (Spotify, Netflix) play in the Flatpak Brave /
+# Chromium / Chrome browsers on Apple Silicon.
+#
+# Usage: fenoa-widevine [--wire-only]
+#
+# Why this exists: Google serves no arm64 CDM to the Chromium component updater, so "enable DRM"
+# in a browser never fetches anything on aarch64. The only working source is Fedora Asahi's
+# widevine-installer (shipped in the image), which downloads the ChromeOS LaCrOS image, fixes up
+# the arm64 CDM and installs it to /var/lib/widevine — persistent on bootc since it lives in /var.
+# Flatpak browsers cannot see /var/lib/widevine from their sandbox, so the CDM is copied into each
+# browser's own profile with the hint file Chromium reads at startup.
+#
+# --wire-only re-points already-installed browsers at an existing CDM without downloading anything
+# or prompting for the license.
+
+set -e
+
+if [[ $(uname -m) != "aarch64" ]]; then
+  echo "Widevine provisioning only applies to Apple Silicon (aarch64); nothing to do."
+  exit 0
+fi
+
+wire_only=0
+if [[ ${1:-} == "--wire-only" ]]; then
+  wire_only=1
+fi
+
+CDM_DIR="${FENOA_WIDEVINE_DIR:-/var/lib/widevine}"
+CDM_LIB="$CDM_DIR/libwidevinecdm.so"
+CDM_MANIFEST="$CDM_DIR/manifest.json"
+
+# Chromium-family Flatpaks we wire: "<app-id>:<profile-subdir>:<is-brave>".
+# Only Brave gates Widevine behind an opt-in pref; Chromium/Chrome enable it by default.
+CHROMIUM_FLATPAKS=(
+  "com.brave.Browser:BraveSoftware/Brave-Browser:1"
+  "org.chromium.Chromium:chromium:0"
+  "com.google.Chrome:google-chrome:0"
+)
+
+running_browsers=()
+brave_running=0
+
+# A usable CDM needs both the library and its manifest. Requiring both keeps --wire-only a clean
+# no-op on a half-installed CDM instead of letting jq abort.
+cdm_installed() {
+  [[ -e $CDM_LIB && -f $CDM_MANIFEST ]]
+}
+
+flatpak_running() {
+  flatpak ps --columns=application 2>/dev/null | grep -qx "$1"
+}
+
+enable_brave_optin() {
+  local prefs="$1"
+  if [[ -f $prefs ]]; then
+    local tmp
+    tmp=$(mktemp)
+    if jq '.brave = (.brave // {}) | .brave.widevine_opted_in = true' "$prefs" >"$tmp" 2>/dev/null; then
+      mv -f "$tmp" "$prefs"
+    else
+      rm -f "$tmp"
+    fi
+  else
+    mkdir -p "$(dirname "$prefs")"
+    printf '{"brave":{"widevine_opted_in":true}}' >"$prefs"
+  fi
+}
+
+wire_browser() {
+  local appid="$1" subdir="$2" is_brave="$3"
+
+  # The hint Path must be the path the sandboxed browser resolves internally. Inside the Flatpak
+  # sandbox $HOME is the canonical /var/home/<user>, not the /home symlink; a /home/... hint makes
+  # Chromium log "Widevine enabled but no library found" and skip the CDM.
+  local home
+  home="$(readlink -f "$HOME")"
+  local profile="$home/.var/app/$appid/config/$subdir"
+  local wv_dir="$profile/WidevineCdm"
+  local version dest
+  version=$(jq -r '.version' "$CDM_MANIFEST")
+  dest="$wv_dir/$version"
+
+  echo "  Wiring $appid"
+  mkdir -p "$dest/_platform_specific/linux_arm64"
+  install -m 0644 "$CDM_MANIFEST" "$dest/manifest.json"
+  install -m 0644 "$CDM_LIB" "$dest/_platform_specific/linux_arm64/libwidevinecdm.so"
+  printf '{"Path":"%s"}' "$dest" >"$wv_dir/latest-component-updated-widevine-cdm"
+
+  if (( is_brave )); then
+    enable_brave_optin "$profile/Default/Preferences"
+  fi
+
+  if flatpak_running "$appid"; then
+    running_browsers+=("$appid")
+    if (( is_brave )); then
+      brave_running=1
+    fi
+  fi
+}
+
+# Download + install the CDM itself (needs root and the user's license acceptance).
+if (( ! wire_only )) && ! cdm_installed; then
+  if ! command -v widevine-installer >/dev/null 2>&1; then
+    echo "widevine-installer is not available." >&2
+    echo "It ships with the Fenoa image; update with 'sudo bootc upgrade' and try again." >&2
+    exit 1
+  fi
+  echo "Downloading and installing the Widevine CDM..."
+  echo "(You will be asked to accept Google's proprietary Widevine license.)"
+  echo
+  sudo widevine-installer
+  echo
+fi
+
+if ! cdm_installed; then
+  if (( wire_only )); then
+    # Nothing installed yet; leave it for the interactive run.
+    exit 0
+  fi
+  echo "Widevine CDM is not installed; aborting." >&2
+  exit 1
+fi
+
+echo "Wiring Flatpak browsers to the Widevine CDM..."
+wired=0
+for entry in "${CHROMIUM_FLATPAKS[@]}"; do
+  IFS=: read -r appid subdir is_brave <<<"$entry"
+  if [[ -d "$HOME/.var/app/$appid" ]]; then
+    wire_browser "$appid" "$subdir" "$is_brave"
+    wired=1
+  fi
+done
+
+if (( ! wired )); then
+  echo "No Brave/Chromium/Chrome Flatpak has been started yet."
+  echo "Open the browser once (so its profile exists), then run this again to enable DRM."
+  exit 0
+fi
+
+echo
+if (( ${#running_browsers[@]} )); then
+  echo "Note: ${running_browsers[*]} still running — fully quit it (not just close the window) and reopen so the CDM loads."
+  if (( brave_running )); then
+    echo "If DRM content still won't play in Brave afterwards, run this command again once Brave is fully closed."
+  fi
+else
+  echo "Done. Restart your browser, then DRM sites (Spotify, Netflix) will play."
+fi

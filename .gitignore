@@ -1,0 +1,12 @@
+# Build output
+*.raw
+*.tar
+*.log
+build/
+dist/
+
+# Editors / OS
+.vscode/
+.idea/
+.cache/
+.DS_Store

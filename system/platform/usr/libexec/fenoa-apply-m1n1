@@ -1,0 +1,105 @@
+#!/bin/bash
+# Refresh the Asahi PREBOOT layer in the OS EFI System Partition after an image update:
+#   <ESP>/m1n1/boot.bin   (m1n1 stage 2 + U-Boot + devicetree)   -> via update-m1n1
+#   <ESP>/vendorfw/...     (per-machine Apple firmware)           -> via asahi-fwupdate (opt-in)
+#
+# This is PLAIN bootc — no rpm-ostree, no bootupd. bootc owns the OS bootloader
+# (/EFI/BOOT/BOOTAA64.EFI, here systemd-boot) but is NOT Asahi-aware, so it never refreshes the
+# preboot layer. On mutable Asahi these refresh automatically on kernel/firmware updates; on
+# bootc they don't.
+#
+# Why boot.bin can't be bypassed: m1n1 patches the devicetree dynamically for THIS machine, so
+# the DT must flow through boot.bin — you can't hand systemd-boot a static image DTB instead.
+# So a kernel DT change (e.g. the 6.19 USB DT, or the fairydust DP-alt DT) with a stale boot.bin
+# breaks hardware. Policy: refresh boot.bin only when the kernel changes (leave it in place
+# otherwise); refresh vendorfw only when opted in.
+#
+# Reboot semantics (inherent to Asahi): after `bootc upgrade` + reboot you're on the new kernel
+# but boot.bin still holds the old DT; this rewrites it, effective on the NEXT boot. Set
+# FENOA_M1N1_AUTOREBOOT=1 (in /etc/default/fenoa-m1n1) to auto-reboot when it changed.
+set -uo pipefail
+
+# update-m1n1 is a distro script (/usr/bin/sh) that runs `set -e` and, at its core, does:
+#     gzip -c "$U_BOOT" >>"${TARGET}.new"
+# Every file in an ostree/composefs deployment has mtime 0 — timestamps are normalised at commit —
+# and GNU gzip treats a zero mtime as "file timestamp out of range for gzip format": it warns and
+# exits 2. Under `set -e` that kills update-m1n1 before it writes boot.bin, so on an atomic install
+# the m1n1 + devicetree refresh fails every time. Confirmed on hardware (gzip 1.12, Fedora Asahi
+# Remix 44): the compressed output is correct, only the exit status is fatal.
+#
+# /usr is read-only, so we cannot fix the blob's mtime in place. Hand gzip a copy that has a real
+# one instead, bind-mounted over the original inside a private mount namespace that unwinds itself
+# when update-m1n1 exits. Harmless once the distro stops exiting non-zero on the warning.
+UBOOT_BLOB="${UBOOT_BLOB:-/usr/share/uboot/apple_m1/u-boot-nodtb.bin}"
+
+# Copy the blob somewhere writable, which gives it the current time (plain cp preserves no
+# timestamps). Echoes the copy's path. Split out so the fix is testable without privileges.
+stage_gzip_safe_uboot() {
+  local src="$1" dir
+  dir="$(mktemp -d)" || return 1
+  cp -- "$src" "$dir/$(basename -- "$src")" || { rm -rf "$dir"; return 1; }
+  printf '%s\n' "$dir/$(basename -- "$src")"
+}
+
+run_update_m1n1() {
+  local staged rc
+  if [[ ! -e $UBOOT_BLOB ]]; then
+    update-m1n1
+    return
+  fi
+  staged="$(stage_gzip_safe_uboot "$UBOOT_BLOB")" || {
+    echo "apply-m1n1: could not stage $UBOOT_BLOB — running update-m1n1 unmodified" >&2
+    update-m1n1
+    return
+  }
+  unshare --mount --propagation private -- \
+    sh -c 'mount --bind "$1" "$2" && exec update-m1n1' _ "$staged" "$UBOOT_BLOB"
+  rc=$?
+  rm -rf -- "$(dirname -- "$staged")"
+  return "$rc"
+}
+
+# Tests source this file for the two functions above; stop before the refresh runs.
+[[ ${FENOA_APPLY_M1N1_LIB:-0} == "1" ]] && return 0
+
+[[ $(uname -m) == "aarch64" ]] || exit 0
+command -v update-m1n1 >/dev/null 2>&1 || exit 0     # not an Asahi machine
+
+state="${FENOA_STATE_DIR:-/var/lib/fenoa}"
+mkdir -p "$state"
+changed=0
+
+# --- m1n1 stage 2 + devicetree: refresh once per kernel, else leave in place ---
+kstamp="$state/m1n1-applied"
+cur="$(uname -r)"
+if [[ "$(cat "$kstamp" 2>/dev/null)" != "$cur" ]]; then
+  echo "apply-m1n1: refreshing m1n1 + devicetree for kernel $cur"
+  if run_update_m1n1; then
+    printf '%s\n' "$cur" >"$kstamp"
+    changed=1
+  else
+    echo "apply-m1n1: update-m1n1 FAILED" >&2
+    exit 1
+  fi
+else
+  echo "apply-m1n1: boot.bin already current for $cur (left in place)"
+fi
+
+# --- vendor firmware: leave in place by default; opt-in refresh via the distro's fw tool ---
+# The tool re-derives vendorfw from this machine's Apple firmware. Refresh is OPT-IN
+# (FENOA_FWEXTRACT=1) and best-effort. Default = leave-in-place (the install wrapper preserves the
+# existing vendorfw, which changes very rarely).
+fwtool="$(command -v asahi-fwupdate 2>/dev/null || command -v asahi-fwextract 2>/dev/null || true)"
+if [[ -n $fwtool && ${FENOA_FWEXTRACT:-0} == "1" ]]; then
+  echo "apply-m1n1: refreshing vendor firmware via $(basename "$fwtool")"
+  "$fwtool" || echo "apply-m1n1: firmware refresh failed — vendorfw left in place" >&2
+fi
+
+if (( changed )); then
+  if [[ ${FENOA_M1N1_AUTOREBOOT:-0} == "1" ]]; then
+    echo "apply-m1n1: rebooting to boot with the refreshed devicetree"
+    systemctl reboot
+  else
+    echo "apply-m1n1: boot.bin refreshed — reboot once to apply (FENOA_M1N1_AUTOREBOOT=1 to automate)"
+  fi
+fi

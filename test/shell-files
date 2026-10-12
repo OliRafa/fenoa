@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# List every tracked shell script (by extension or by a bash shebang), one per line, relative to the
+# repo root. Shared by test/all and the CI lint job so both check the same set.
+
+set -euo pipefail
+
+ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$ROOT"
+
+git ls-files -z --cached --others --exclude-standard | while IFS= read -r -d '' file; do
+  [[ -f $file ]] || continue
+  case $file in
+    *.sh) printf '%s\n' "$file" ;;
+    *)
+      first_line=$(head -n1 -- "$file" 2>/dev/null || true)
+      [[ $first_line == "#!/bin/bash"* ]] && printf '%s\n' "$file"
+      ;;
+  esac
+done
