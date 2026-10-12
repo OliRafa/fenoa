@@ -13,7 +13,7 @@ Both are rebuilt weekly and on every change, smoke-tested, and cosign-signed.
 
 ## What you get
 
-- **Desktop:** Hyprland (Lua config) with Noctalia for the bar, launcher, control center, notifications, OSD, lock screen, idle handling, polkit prompts, clipboard history, screenshots, night light and wallpaper. Noctalia's palette (a built-in scheme, or one generated from your wallpaper) also colours GTK apps, foot and Hyprland's borders.
+- **Desktop:** Hyprland (Lua config) with Noctalia for the bar, launcher, control center, notifications, OSD, lock screen, idle handling, polkit prompts, clipboard history, screenshots, night light and wallpaper. Noctalia's palette (a built-in scheme, or one generated from your wallpaper) also colours native GTK apps (Nautilus, settings dialogs), foot and Hyprland's borders; Flatpak apps keep their own styling.
 - **Login:** noctalia-greeter on greetd, styled like the shell (Noctalia syncs your wallpaper and palette to it). Your login password unlocks the GNOME keyring.
 - **Apps:** foot, Nautilus, mpv, udiskie (USB automount), Docker and Homebrew in the image; Brave, Loupe, Evince, LibreOffice, Obsidian, LocalSend (Flathub) and OBS Studio (Fedora's Flatpak — Flathub has no aarch64 build) installed on first boot; shell and developer tools (starship, zoxide, fzf, eza, bat, ripgrep, fd, lazygit, btop, Neovim, tmux, gh, language toolchains) from the [Brewfile](Brewfile). Source Code Pro is the default monospace font.
 - **Apple Silicon:** systemd-boot on composefs, m1n1/devicetree refresh after updates, the trackpad boot-race fix and macOS-style function keys in the initramfs, keyboard backlight on Shift+brightness, the Apple lid switch, Widevine DRM for Brave on aarch64. See [docs/asahi.md](docs/asahi.md).
@@ -23,6 +23,7 @@ Both are rebuilt weekly and on every change, smoke-tested, and cosign-signed.
 On a Mac running **Fedora Asahi Remix 44** (install it alongside macOS first):
 
 ```sh
+sudo dnf install -y git podman          # Fedora Asahi Remix Minimal ships neither
 git clone https://github.com/OliRafa/fenoa && cd fenoa
 sudo deploy/fenoa-install ghcr.io/olirafa/fenoa:44     # or ghcr.io/olirafa/fenoa-fairydust:44
 sudo reboot
@@ -39,7 +40,7 @@ sudo reboot
 
 ### First boot
 
-1. `systemd-firstboot` asks for locale, keymap, timezone, hostname and the root password.
+1. `systemd-firstboot` asks for locale, keymap, timezone and the root password (set a hostname later with `hostnamectl hostname <name>`). Hyprland follows the keymap you pick.
 2. `fenoa-firstboot-user` asks for your username, full name and password on tty1 (or reads a preseed from `/etc/fenoa/firstboot-user.conf`).
 3. The greeter comes up; log in to the **Hyprland (uwsm-managed)** session. Noctalia's setup wizard takes it from there.
 4. In the background the Flatpak apps and the Brewfile install once the network is up. A reboot or two later, `fenoa-apply-m1n1` has refreshed m1n1 and the devicetree for the installed kernel.

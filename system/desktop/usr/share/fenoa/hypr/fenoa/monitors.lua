@@ -1,9 +1,7 @@
--- Retina panels: let Hyprland pick the scale (2x on every Apple Silicon laptop panel) and the
--- preferred mode; external displays get the same treatment. Override per output in
--- ~/.config/hypr/hyprland.lua, e.g.
---   hl.monitor({ output = "DP-1", mode = "3440x1440@60", position = "auto-right", scale = 1 })
--- Find output names with `hyprctl monitors`. XWayland apps scale by GDK_SCALE, set for the whole
--- session in /usr/share/uwsm/env.d/10-fenoa.
+-- Monitors: preferred mode, automatic placement and Hyprland's automatic scale for every output.
+-- Pick your own per output in ~/.config/hypr/hyprland.lua; names come from `hyprctl monitors`, e.g.
+--   hl.monitor({ output = "eDP-1", mode = "preferred", position = "auto", scale = 1.25 })
+--   hl.monitor({ output = "DP-1", mode = "3440x1440@60", position = "auto-up", scale = 1 })
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
 
 -- Lid closed with an external display attached: fenoa-hypr-clamshell turns the internal panel off

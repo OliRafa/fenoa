@@ -13,7 +13,7 @@ Documentation=man:bootc(8)
 # been provisioned yet", and the helper writes it only once a human user actually exists — an
 # aborted prompt or a failed useradd therefore retries on the next boot rather than latching off.
 ConditionPathExists=!/var/lib/fenoa/firstboot-user.done
-# systemd-firstboot handles root password / locale / timezone / hostname first; then we add the
+# systemd-firstboot handles locale / keymap / timezone / root password first; then we add the
 # human user. Must finish BEFORE the greeter (greetd aliases display-manager.service) so it has an
 # account to offer.
 After=systemd-firstboot.service systemd-user-sessions.service

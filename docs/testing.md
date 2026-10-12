@@ -16,6 +16,8 @@ Runs anywhere (CI: `.github/workflows/tests.yml` on ubuntu, plus shellcheck at e
   - `platform-overlay-test.sh` — Apple HID drop-ins reach the initramfs step, enabled units ship, no Omarchy leftovers, shebangs
   - `desktop-config-test.sh` — config parsing and cross-file agreement (greetd ↔ tmpfiles ↔ greeter, skel ↔ defaults, bindings ↔ helpers, Flatpaks ↔ default apps); runs `Hyprland --verify-config` when Hyprland is installed
   - `desktop-helpers-test.sh` — `fenoa-kbd-backlight` and `fenoa-hypr-clamshell`
+  - `keyboard-layout-test.sh` — Hyprland's layout derived from `localectl`'s XKB settings or the first-boot console keymap (via `kbd-model-map`), Latin layout first
+  - `shell-setup-test.sh` — `/etc/profile.d/fenoa-shell.sh` wires starship, zoxide, fzf and eza into interactive bash only when installed
 - `deploy/tests/*.test.sh` — the ESP backup/restore, capacity, GPT absorb, boot-entry repair and BLS prune libraries
 
 Unit tests source `test/unit.d/base-test.sh` (`pass`, `fail`, `require_command`). A file stops at its first failure; the runner keeps going and reports every failing file.

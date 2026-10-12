@@ -251,7 +251,7 @@ log in.
 
 So the image creates the primary user **once, on first boot**, before the display manager:
 
-- **`systemd-firstboot`** — root password, locale, timezone, keymap, hostname.
+- **`systemd-firstboot`** — locale, keymap, timezone, root password (the hostname is not prompted; set it with `hostnamectl hostname <name>`).
 - **`fenoa-firstboot-user.service`** — the human account (added to `wheel` ⇒ sudo). Two modes:
   - **Interactive** (default): prompts on tty1 for username / full name / password.
   - **Preseed**: if `/etc/fenoa/firstboot-user.conf` exists it's read non-interactively, then

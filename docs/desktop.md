@@ -91,10 +91,11 @@ The Mac top row sends these without Fn (`hid_apple fnmode=1`).
 
 ## Configuration
 
-- **Hyprland:** `~/.config/hypr/hyprland.lua`. It loads the defaults, then your settings, then Noctalia's palette. Check a change with `Hyprland --verify-config`. Monitors: `hl.monitor({ output = "DP-1", mode = "3440x1440@60", position = "auto-right", scale = 1 })`; names from `hyprctl monitors`.
+- **Hyprland:** `~/.config/hypr/hyprland.lua`. It loads the defaults, then your settings, then Noctalia's palette. Check a change with `Hyprland --verify-config`. Monitors default to Hyprland's automatic scale; set yours per output, e.g. `hl.monitor({ output = "eDP-1", mode = "preferred", position = "auto", scale = 1.25 })` (names from `hyprctl monitors`). XWayland apps are scaled by Hyprland (right size, slightly soft at fractional scales); for pixel-sharp XWayland at an integer scale set `xwayland.force_zero_scaling = true` and export `GDK_SCALE` in `~/.config/uwsm/env`.
+- **Keyboard:** Hyprland follows the system layout (`localectl set-x11-keymap <layout> [model] [variant] [options]`, then log in again); override with `hl.config({ input = { kb_layout = "..." } })`.
 - **Noctalia:** `~/.config/noctalia/config.toml` (includes `/usr/share/fenoa/noctalia/fenoa.toml`); the Settings window saves to `~/.local/state/noctalia/settings.toml`, which wins. Check with `noctalia config validate`.
 - **Default apps:** `~/.config/mimeapps.list` overrides `/usr/share/applications/hyprland-mimeapps.list`.
-- **Session environment:** `/usr/share/uwsm/env.d/10-fenoa` sets the Wayland backends, cursor size, Qt/GTK theming, `GDK_SCALE`, `TERMINAL`, `EDITOR` and Homebrew's `PATH` for the whole session (uwsm exports it to systemd and D-Bus activation too); add your own in `~/.config/uwsm/env`.
+- **Session environment:** `/usr/share/uwsm/env.d/10-fenoa` sets the Wayland backends, cursor size, Qt/GTK theming, `TERMINAL`, `EDITOR` and Homebrew's `PATH` for the whole session (uwsm exports it to systemd and D-Bus activation too); add your own in `~/.config/uwsm/env`.
 
 ## The greeter
 

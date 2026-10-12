@@ -76,7 +76,11 @@ denials="$(journalctl -b -k -g 'avc:  denied' --no-pager -q 2>/dev/null | grep -
 echo "== Apple keyboard + trackpad =="
 [[ "$(cat /sys/module/hid_apple/parameters/fnmode 2>/dev/null)" == "1" ]] && ok "hid_apple fnmode=1" || no "hid_apple fnmode is not 1"
 devices="$(cat /proc/bus/input/devices 2>/dev/null || true)"
-case $devices in *"Apple MTP multi-touch"*) ok "internal trackpad present" ;; *) note "no internal trackpad (desktop Mac?)" ;; esac
+# M1 13" laptops expose SPI devices ("Apple SPI Trackpad"); M2 and later, MTP ("Apple MTP multi-touch").
+case $devices in
+  *"Apple SPI Trackpad"*|*"Apple MTP multi-touch"*) ok "internal trackpad present" ;;
+  *) note "no internal trackpad (desktop Mac?)" ;;
+esac
 initrd_hid="$(journalctl -b -k --no-pager -q 2>/dev/null | grep -m1 -i 'hid-apple\|hid_apple' || true)"
 [[ -n $initrd_hid ]] && note "hid_apple: $initrd_hid"
 
