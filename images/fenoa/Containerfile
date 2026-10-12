@@ -134,7 +134,8 @@ RUN set -eux; \
 #     devicetree in /boot rather than the image's — so a kernel devicetree change (the 6.19 USB DT,
 #     the fairydust DP-alt DT) boots stale and breaks hardware. Point DTBS at the image's devicetree
 #     (update-m1n1 globs $DTBS/apple/t*.dtb) and enable fenoa-apply-m1n1.service, which runs
-#     update-m1n1 once per kernel. A no-op on non-Asahi machines (the helper self-skips).
+#     update-m1n1 once per kernel. It only runs on a boot that came through m1n1 (the unit's
+#     ConditionPathExists on the devicetree node m1n1 sets).
 RUN set -eux; \
     mkdir -p /etc/sysconfig; f=/etc/sysconfig/update-m1n1; touch "$f"; \
     if grep -q '^DTBS=' "$f"; then \

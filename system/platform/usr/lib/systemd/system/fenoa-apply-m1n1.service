@@ -3,8 +3,10 @@ Description=Apply m1n1 + devicetree from the atomic image to the boot partition 
 Documentation=https://github.com/fedora-asahi-remix-atomic-desktops/images/issues/2
 # /boot and /usr must be present; ordered late so it never blocks the boot it runs in.
 After=local-fs.target
-# No ConditionPathExists for update-m1n1: it may live in /usr/bin or /usr/sbin. The
-# ExecStart script self-skips (exit 0) on non-Asahi machines instead.
+# Only when this boot came through m1n1: it records the ESP it booted from (the partition's UUID)
+# in the devicetree, and that is how update-m1n1 finds the ESP. update-m1n1 itself ships in every
+# Fenoa image, so its presence says nothing about the machine.
+ConditionPathExists=/proc/device-tree/chosen/asahi,efi-system-partition
 
 [Service]
 Type=oneshot

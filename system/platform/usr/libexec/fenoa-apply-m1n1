@@ -62,8 +62,15 @@ run_update_m1n1() {
 # Tests source this file for the two functions above; stop before the refresh runs.
 [[ ${FENOA_APPLY_M1N1_LIB:-0} == "1" ]] && return 0
 
-[[ $(uname -m) == "aarch64" ]] || exit 0
-command -v update-m1n1 >/dev/null 2>&1 || exit 0     # not an Asahi machine
+# Only a boot that came through m1n1 has a boot.bin to refresh. m1n1 records the ESP it booted from
+# in the devicetree (update-m1n1 finds the ESP through it); without that node this is not an Asahi
+# boot. update-m1n1 itself ships in every Fenoa image, so it proves nothing. The unit carries the
+# same condition; this repeats it for manual runs. Overridable for tests.
+esp_node="${FENOA_ASAHI_ESP_NODE:-/proc/device-tree/chosen/asahi,efi-system-partition}"
+if [[ ! -e $esp_node ]]; then
+  echo "apply-m1n1: $esp_node not found — not booted through m1n1, nothing to refresh"
+  exit 0
+fi
 
 state="${FENOA_STATE_DIR:-/var/lib/fenoa}"
 mkdir -p "$state"
