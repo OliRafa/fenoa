@@ -34,10 +34,10 @@ The split follows one rule: the **platform** stage holds everything a non-graphi
 
 | Step | What |
 |---|---|
-| D1 | lionheartp/Hyprland COPR (priority 10, never replaces GTK/Pango/Cairo) and Terra restricted to `noctalia-greeter`, both via `/etc/dnf/repos.override.d` |
+| D1 | lionheartp/Hyprland COPR (priority 10; its GTK/Pango/Cairo and Noctalia/greeter/Quickshell builds excluded) and Terra restricted to `noctalia-greeter`, both via `/etc/dnf/repos.override.d` |
 | D2 | `hyprland` + `hyprland-uwsm`, falling back to the `-git` builds when stable is unresolvable |
 | D3 | `packages/desktop.packages` |
-| D4 | `COPY system/desktop/ /`; assert the greeter account, binaries and session name |
+| D4 | `COPY system/desktop/ /`; assert the greeter account, binaries and session name; install the SELinux file context for the greeter's state directory |
 | D5 | enable greetd (it aliases `display-manager.service`); default to `graphical.target` |
 | D6 | clean residue; `bootc container lint` |
 

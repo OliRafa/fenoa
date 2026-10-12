@@ -63,7 +63,14 @@ grep -qE "^d /var/lib/noctalia-greeter 0750 $greeter_user $greeter_user -$" "$tm
   fail "the greeter state dir is 0750 and owned by the account greetd uses (else a blank greeter)" "$(cat "$tmpfiles")"
 grep -qE '^L\+ /var/lib/noctalia-greeter/greeter.toml - - - - /usr/share/fenoa/greeter/greeter.toml$' "$tmpfiles" ||
   fail "greeter.toml is linked from the image"
-pass "tmpfiles creates the greeter state dir for greetd and links greeter.toml"
+grep -qE "^d /var/lib/greetd 0750 $greeter_user $greeter_user -$" "$tmpfiles" ||
+  fail "greetd's home is recreated by tmpfiles (a bootc switch carries no /var/lib/greetd)"
+cil="$D/usr/share/fenoa/selinux/fenoa-greeter.cil"
+grep -qF '(filecon "/var/lib/noctalia-greeter(/.*)?" any (system_u object_r xdm_var_lib_t' "$cil" ||
+  fail "the greeter state dir gets greetd's SELinux type (xdm_var_lib_t)"
+grep -qF "semodule -i /usr/share/fenoa/selinux/fenoa-greeter.cil" "$containerfile" ||
+  fail "the Containerfile installs the SELinux module"
+pass "tmpfiles creates the greeter state dir and greetd's home, links greeter.toml; the state dir is xdm_var_lib_t"
 
 session=$(toml "$greeter" 't["session"]["default"]')
 [[ $session == "Hyprland (uwsm-managed)" ]] || fail "the greeter defaults to the uwsm Hyprland session" "got: $session"
@@ -171,6 +178,11 @@ if sed 's/#.*//' "$packages" | awk 'NF{print $1}' | grep -qxE 'sddm|quickshell';
   fail "desktop.packages carries no SDDM or Quickshell"
 fi
 pass "desktop.packages installs the shell, greeter and session, and nothing from Omarchy's stack"
+
+# The COPR carries -git builds of noctalia/noctalia-greeter; they must never win over Fedora/Terra.
+grep -qF "excludepkgs=gtk4* gtk3* pango* cairo* noctalia* quickshell*" "$containerfile" ||
+  fail "the Hyprland COPR is excluded from GTK, Noctalia, the greeter and Quickshell"
+pass "the Hyprland COPR cannot replace GTK, Noctalia, the greeter or Quickshell"
 
 # uwsm sources env.d with sh.
 sh -n "$D/usr/share/uwsm/env.d/10-fenoa" || fail "uwsm env.d/10-fenoa is valid sh"

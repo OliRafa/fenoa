@@ -207,8 +207,10 @@ FROM platform AS desktop
 
 # D1) Repositories.
 #     - lionheartp/Hyprland COPR: the Asahi-safe Hyprland stack with the 0.55+ Lua config this image
-#       uses. priority=10 makes it win over Fedora for the Hyprland packages; the exclude keeps it
-#       from replacing Fedora's GTK/Pango/Cairo.
+#       uses. priority=10 makes it win over Fedora for the Hyprland packages. It also carries
+#       GTK/Pango/Cairo builds and -git builds of Noctalia, the greeter and Quickshell: excluded, so
+#       GTK stays Fedora's and noctalia/noctalia-greeter can only come from Fedora/Terra (dnf would
+#       otherwise satisfy `noctalia-greeter` with the COPR's noctalia-greeter-git).
 #     - Terra: the only Fedora 44 aarch64 build of noctalia-greeter (noctalia itself is in Fedora).
 #       terra-release is bootstrapped without a signature check, as Terra documents; it installs the
 #       repo's signing key, so everything installed from it afterwards is verified (dnf5 imports the
@@ -216,11 +218,11 @@ FROM platform AS desktop
 #       override restricts Terra to noctalia-greeter, so it can never replace a Fedora package.
 #     Both are set through /etc/dnf/repos.override.d rather than by editing the shipped .repo files.
 RUN set -eux; \
-    dnf -y install dnf-plugins-core; \
     dnf -y copr enable lionheartp/Hyprland; \
     dnf -y install --nogpgcheck --repofrompath 'terra,https://repos.fyralabs.com/terra$releasever' terra-release; \
     mkdir -p /etc/dnf/repos.override.d; \
-    printf '%s\n' '[copr:copr.fedorainfracloud.org:lionheartp:Hyprland]' 'priority=10' 'exclude=gtk4* gtk3* pango* cairo*' \
+    printf '%s\n' '[copr:copr.fedorainfracloud.org:lionheartp:Hyprland]' 'priority=10' \
+      'excludepkgs=gtk4* gtk3* pango* cairo* noctalia* quickshell*' \
       >/etc/dnf/repos.override.d/90-fenoa-hyprland.repo; \
     printf '%s\n' '[terra]' 'includepkgs=noctalia-greeter' >/etc/dnf/repos.override.d/90-fenoa-terra.repo; \
     dnf -y makecache --repo terra; \
@@ -244,7 +246,7 @@ RUN retry() { n=1; while ! "$@"; do [ "$n" -ge 5 ] && return 1; echo "[dnf-retry
 
 # D4) The desktop overlay: Hyprland defaults (/usr/share/fenoa/hypr) and Noctalia defaults
 #     (/usr/share/fenoa/noctalia) that the thin user configs in /etc/skel pull in; greetd + greeter
-#     config and its state-directory tmpfiles entry; the greeter-sync polkit rule; session
+#     config, its state-directory tmpfiles entry and SELinux label; the greeter-sync polkit rule; session
 #     environment, default terminal and default apps; the Flatpak app set; Apple-keyboard helpers.
 #     Copied after the packages so /etc/greetd/config.toml replaces the package's agreety default.
 COPY system/desktop/ /
@@ -254,7 +256,11 @@ RUN set -eux; \
     [ -x /usr/bin/noctalia-greeter-session ] || { echo "[D4] noctalia-greeter-session missing"; exit 1; }; \
     [ -x /usr/bin/noctalia-greeter-apply-appearance ] || { echo "[D4] greeter sync helper missing"; exit 1; }; \
     grep -qx 'Name=Hyprland (uwsm-managed)' /usr/share/wayland-sessions/hyprland-uwsm.desktop \
-      || { echo "[D4] the greeter's default session name no longer matches hyprland-uwsm.desktop"; exit 1; }
+      || { echo "[D4] the greeter's default session name no longer matches hyprland-uwsm.desktop"; exit 1; }; \
+    semodule -i /usr/share/fenoa/selinux/fenoa-greeter.cil; \
+    grep -qE '^/var/lib/noctalia-greeter\(/\.\*\)\?[[:space:]]+system_u:object_r:xdm_var_lib_t:s0$' \
+      /etc/selinux/targeted/contexts/files/file_contexts \
+      || { echo "[D4] the greeter state directory is not labelled xdm_var_lib_t"; exit 1; }
 
 # D5) Boot to the greeter. greetd aliases display-manager.service, which fenoa-firstboot-user is
 #     ordered before, so the first account exists by the time the greeter lists users.

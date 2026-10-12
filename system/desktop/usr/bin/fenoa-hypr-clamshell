@@ -6,9 +6,10 @@
 #
 # Bound in Hyprland to the Apple Silicon lid switch ("Apple SMC power/lid events"). With no external
 # display, closing the lid leaves the panel alone and logind suspends as usual (an external display
-# makes logind treat the machine as docked and ignore the lid). On open the panel is re-enabled
-# explicitly — a runtime rule is not guaranteed to be dropped by a reload — and `hyprctl reload`
-# then re-applies the configured monitor rules, so a scale set in hyprland.lua still wins.
+# makes logind treat the machine as docked and ignore the lid). The panel's name is left in
+# $XDG_RUNTIME_DIR/fenoa-clamshell while it is off, and the Hyprland defaults (fenoa/monitors.lua)
+# re-disable it on every config reload. On open the marker goes, the panel is re-enabled explicitly
+# and `hyprctl reload` re-applies the configured monitor rules, so a scale set in hyprland.lua wins.
 
 set -euo pipefail
 
@@ -26,6 +27,8 @@ external_connected() {
   hyprctl monitors -j | jq -e '[.[] | select(.name | test("^(eDP|LVDS|DSI)-") | not)] | length > 0' >/dev/null
 }
 
+marker="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/fenoa-clamshell"
+
 internal="$(internal_monitor)"
 # The name ends up inside a Lua string; only accept plain connector names.
 [[ $internal =~ ^[A-Za-z0-9._-]+$ ]] || exit 0
@@ -33,10 +36,12 @@ internal="$(internal_monitor)"
 case $action in
   close)
     if external_connected; then
+      printf '%s\n' "$internal" >"$marker"
       hyprctl eval "hl.monitor({ output = \"$internal\", disabled = true })" >/dev/null
     fi
     ;;
   open)
+    rm -f "$marker"
     hyprctl eval "hl.monitor({ output = \"$internal\", mode = \"preferred\", position = \"auto\", scale = \"auto\" })" >/dev/null
     hyprctl reload >/dev/null
     ;;

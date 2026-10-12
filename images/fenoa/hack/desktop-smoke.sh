@@ -33,6 +33,8 @@ for p in sddm quickshell firefox; do
 done
 override="$(cat /etc/dnf/repos.override.d/90-fenoa-terra.repo 2>/dev/null || true)"
 case $override in *"includepkgs=noctalia-greeter"*) ok "Terra restricted to noctalia-greeter" ;; *) no "Terra repo is not restricted" ;; esac
+origin="$(rpm -q --qf '%{VENDOR}|%{PACKAGER}\n' noctalia-greeter 2>/dev/null || true)"
+case $origin in *[Cc]opr*) no "noctalia-greeter came from the COPR, not Terra: $origin" ;; *) ok "noctalia-greeter is not the COPR build" ;; esac
 
 echo "== greeter =="
 dm="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)"
@@ -52,6 +54,13 @@ state="$(stat -c '%a %U:%G' /var/lib/noctalia-greeter 2>/dev/null || true)"
 [[ $state == "750 greetd:greetd" ]] && ok "/var/lib/noctalia-greeter is 0750 greetd:greetd" || no "greeter state dir wrong: ${state:-missing}"
 [[ "$(readlink -f /var/lib/noctalia-greeter/greeter.toml)" == "/usr/share/fenoa/greeter/greeter.toml" ]] \
   && ok "greeter.toml links to the image copy" || no "greeter.toml not linked"
+# Read the compiled policy rather than matchpathcon, which depends on the host having SELinux on.
+fcontext="$(grep -F '/var/lib/noctalia-greeter(' /etc/selinux/targeted/contexts/files/file_contexts 2>/dev/null || true)"
+case $fcontext in
+  *xdm_var_lib_t*) ok "greeter state is labelled xdm_var_lib_t (the greeter may write it)" ;;
+  *) no "no xdm_var_lib_t file context for /var/lib/noctalia-greeter (${fcontext:-none})" ;;
+esac
+[[ "$(stat -c '%a %U' /var/lib/greetd 2>/dev/null)" == "750 greetd" ]] && ok "/var/lib/greetd (greetd's home) recreated by tmpfiles" || no "/var/lib/greetd missing or wrong"
 sessions="$(noctalia-greeter sessions 2>/dev/null || true)"
 default_session="$(sed -n 's/^default = "\(.*\)"$/\1/p' /usr/share/fenoa/greeter/greeter.toml)"
 case $sessions in *"$default_session"*) ok "greeter finds its default session: $default_session" ;; *) no "greeter sessions do not include '$default_session': $sessions" ;; esac

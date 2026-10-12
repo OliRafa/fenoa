@@ -47,7 +47,9 @@ echo "hyprctl $*" >>"$MOCK_LOG"
 SH
 chmod +x "$mock_bin"/*
 
-run() { env PATH="$mock_bin:$PATH" MOCK_LOG="$log" FENOA_LEDS_DIR="$test_tmp/leds" "$@"; }
+mkdir -p "$test_tmp/run"
+marker="$test_tmp/run/fenoa-clamshell"
+run() { env PATH="$mock_bin:$PATH" MOCK_LOG="$log" FENOA_LEDS_DIR="$test_tmp/leds" XDG_RUNTIME_DIR="$test_tmp/run" "$@"; }
 
 # --- keyboard backlight ----------------------------------------------------------------------------
 
@@ -78,13 +80,16 @@ pass "a missing device and an unknown direction fail"
 : >"$log"; run MOCK_EXTERNAL=1 bash "$clam" close || fail "close succeeds"
 grep -qF 'hyprctl eval hl.monitor({ output = "eDP-1", disabled = true })' "$log" ||
   fail "lid close with an external display disables the internal panel" "$(cat "$log")"
-pass "lid close with an external display disables the internal panel"
+[[ "$(cat "$marker" 2>/dev/null)" == "eDP-1" ]] || fail "lid close leaves the panel name for config reloads"
+pass "lid close with an external display disables the internal panel and leaves a reload marker"
 
-: >"$log"; run MOCK_EXTERNAL=0 bash "$clam" close
+: >"$log"; rm -f "$marker"; run MOCK_EXTERNAL=0 bash "$clam" close
 [[ ! -s $log ]] || fail "lid close without an external display leaves the panel alone" "$(cat "$log")"
+[[ ! -e $marker ]] || fail "no reload marker without an external display"
 pass "lid close without an external display leaves the panel to logind"
 
-: >"$log"; run bash "$clam" open
+: >"$log"; printf 'eDP-1\n' >"$marker"; run bash "$clam" open
+[[ ! -e $marker ]] || fail "lid open removes the reload marker"
 grep -qF 'hyprctl eval hl.monitor({ output = "eDP-1", mode = "preferred", position = "auto", scale = "auto" })' "$log" ||
   fail "lid open re-enables the panel" "$(cat "$log")"
 grep -q '^hyprctl reload' "$log" || fail "lid open reloads so configured monitor rules win"

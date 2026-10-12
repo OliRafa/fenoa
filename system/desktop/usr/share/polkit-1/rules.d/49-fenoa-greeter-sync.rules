@@ -4,7 +4,9 @@
 // <user>`, keyed on the wheel group instead of a user list because the image does not know its users
 // at build time. It matches only the packaged constrained action, which accepts exactly
 // `noctalia-greeter-apply-appearance --sync <staging dir>`, run as root, by an active local session.
-// Everyone else keeps the administrator prompt.
+// Everyone else keeps the administrator prompt. Upstream leaves passwordless sync off by default;
+// to require a password here too, mask this rule with an empty file of the same name:
+//   sudo touch /etc/polkit-1/rules.d/49-fenoa-greeter-sync.rules
 polkit.addRule(function (action, subject) {
   if (
     action.id == "org.noctalia.greeter.sync-appearance" &&

@@ -1,0 +1,8 @@
+; Label noctalia-greeter's state directory like greetd's own (/var/lib/greetd): xdm_var_lib_t.
+;
+; Without this it is plain var_lib_t, which the greeter (running as greetd in xdm_t) may only read.
+; Noctalia's appearance sync writes sync.toml and wallpapers there through an unconfined helper, and
+; the greeter later rewrites sync.toml to remember the last session and colour scheme — denied on
+; var_lib_t. With the directory labelled xdm_var_lib_t, the helper's files inherit the label too.
+; Installed with `semodule -i` by images/fenoa/Containerfile step D4.
+(filecon "/var/lib/noctalia-greeter(/.*)?" any (system_u object_r xdm_var_lib_t ((s0) (s0))))

@@ -1,15 +1,35 @@
-# Session environment for the uwsm-managed Hyprland session. uwsm sources this (it does not read
-# /etc/profile.d), so anything apps launched from the shell need on PATH goes here too.
+# Environment for the uwsm-managed Hyprland session. uwsm sources this before starting the compositor
+# and exports it to systemd and D-Bus activation, so every app — launched from the shell, a keybind,
+# a systemd unit or D-Bus — sees the same environment. Read with sh.
 
-# Homebrew: APPEND, so brew's binaries can never shadow system ones (the same rule as
-# /etc/profile.d/brew.sh for login shells).
-if [ -d /home/linuxbrew/.linuxbrew/bin ]; then
-  export PATH="${PATH}:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin"
-fi
+# Prefer Wayland everywhere, with X11 fallbacks.
+export GDK_BACKEND="wayland,x11,*"
+export QT_QPA_PLATFORM="wayland;xcb"
+export QT_QPA_PLATFORMTHEME=gtk3
+export SDL_VIDEODRIVER=wayland
+export MOZ_ENABLE_WAYLAND=1
+export ELECTRON_OZONE_PLATFORM_HINT=wayland
+export OZONE_PLATFORM=wayland
+
+export XCURSOR_SIZE=24
+export HYPRCURSOR_SIZE=24
+
+# XWayland apps render at 1x (xwayland.force_zero_scaling) and scale themselves by this; every Apple
+# Silicon laptop panel runs at 2x.
+export GDK_SCALE=2
 
 # Terminal for apps and the launcher's Terminal=true entries; xdg-terminal-exec picks foot from
 # /etc/xdg/hyprland-xdg-terminals.list.
 export TERMINAL=xdg-terminal-exec
+
+# uwsm only loads /etc/profile (and so /etc/profile.d/brew.sh) in some launch modes; carry what the
+# session needs from it here as well. Homebrew is APPENDED so its binaries never shadow system ones.
+if [ -d /home/linuxbrew/.linuxbrew/bin ]; then
+  case ":${PATH}:" in
+    *:/home/linuxbrew/.linuxbrew/bin:*) ;;
+    *) export PATH="${PATH}:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" ;;
+  esac
+fi
 
 if command -v nvim >/dev/null 2>&1; then
   export EDITOR=nvim VISUAL=nvim

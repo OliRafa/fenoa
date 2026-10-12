@@ -1,22 +1,12 @@
--- Session environment. uwsm also reads /usr/share/uwsm/env.d/10-fenoa for variables that apps
--- started outside the compositor need (PATH, TERMINAL).
-
-hl.env("XCURSOR_SIZE", "24")
-hl.env("HYPRCURSOR_SIZE", "24")
-
--- Prefer Wayland everywhere, with X11 fallbacks.
-hl.env("GDK_BACKEND", "wayland,x11,*")
-hl.env("QT_QPA_PLATFORM", "wayland;xcb")
-hl.env("QT_QPA_PLATFORMTHEME", "gtk3")
-hl.env("SDL_VIDEODRIVER", "wayland")
-hl.env("MOZ_ENABLE_WAYLAND", "1")
-hl.env("ELECTRON_OZONE_PLATFORM_HINT", "wayland")
-hl.env("OZONE_PLATFORM", "wayland")
+-- Session environment variables (Wayland backends, cursor size, Qt/GTK theming, GDK_SCALE) live in
+-- /usr/share/uwsm/env.d/10-fenoa: uwsm exports them to systemd and D-Bus activation as well, so apps
+-- started by either see the same environment as apps started by the compositor. hl.env would only
+-- reach the compositor's own children.
 
 hl.config({
   xwayland = {
-    -- XWayland apps render at 1x and are scaled by GDK_SCALE (fenoa.monitors) instead of being
-    -- upscaled blurrily by the compositor on the Retina panel.
+    -- XWayland apps render at 1x and scale themselves by GDK_SCALE instead of being upscaled
+    -- blurrily by the compositor on the Retina panel.
     force_zero_scaling = true,
   },
 

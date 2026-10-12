@@ -60,7 +60,7 @@ The Mac top row sends these without Fn (`hid_apple fnmode=1`).
 | Play/pause, next, previous | The active MPRIS player |
 | `Print`, `Super + F11`, `Super + Volume down` | Screenshot a region |
 | `Shift + Print`, `Super + F12`, `Super + Volume up` | Screenshot a display |
-| Lid closed with an external display | Internal panel off (`fenoa-hypr-clamshell`); without one, logind suspends |
+| Lid closed with an external display | Internal panel off (`fenoa-hypr-clamshell`, kept off across config reloads); without one, logind suspends |
 
 ### Windows and workspaces
 
@@ -89,13 +89,14 @@ The Mac top row sends these without Fn (`hid_apple fnmode=1`).
 - **Hyprland:** `~/.config/hypr/hyprland.lua`. It loads the defaults, then your settings, then Noctalia's palette. Check a change with `Hyprland --verify-config`. Monitors: `hl.monitor({ output = "DP-1", mode = "3440x1440@60", position = "auto-right", scale = 1 })`; names from `hyprctl monitors`.
 - **Noctalia:** `~/.config/noctalia/config.toml` (includes `/usr/share/fenoa/noctalia/fenoa.toml`); the Settings window saves to `~/.local/state/noctalia/settings.toml`, which wins. Check with `noctalia config validate`.
 - **Default apps:** `~/.config/mimeapps.list` overrides `/usr/share/applications/hyprland-mimeapps.list`.
-- **Session environment:** `~/.config/uwsm/env` adds to `/usr/share/uwsm/env.d/10-fenoa` (Homebrew on `PATH`, `TERMINAL`, `EDITOR`).
+- **Session environment:** `/usr/share/uwsm/env.d/10-fenoa` sets the Wayland backends, cursor size, Qt/GTK theming, `GDK_SCALE`, `TERMINAL`, `EDITOR` and Homebrew's `PATH` for the whole session (uwsm exports it to systemd and D-Bus activation too); add your own in `~/.config/uwsm/env`.
 
 ## The greeter
 
 - greetd runs `/usr/bin/noctalia-greeter-session` as the `greetd` account on VT1 (`/etc/greetd/config.toml`). On Fedora the greeter account is `greetd`, not `greeter` as upstream's docs assume.
-- `/usr/lib/tmpfiles.d/fenoa-greeter.conf` creates `/var/lib/noctalia-greeter` (0750, `greetd`) and links `greeter.toml` to the image copy in `/usr/share/fenoa/greeter/`, which sets the default session to `Hyprland (uwsm-managed)`. Keep appearance out of `greeter.toml`: its values win over the sync.
-- Noctalia's `[shell.greeter_sync] auto_sync` copies wallpaper, palette, font and monitor layout to the greeter whenever they change, through the packaged constrained polkit action. `/usr/share/polkit-1/rules.d/49-fenoa-greeter-sync.rules` lets active local members of `wheel` do that without a password; anyone else gets an administrator prompt from Noctalia's polkit agent.
+- `/usr/lib/tmpfiles.d/fenoa-greeter.conf` creates `/var/lib/noctalia-greeter` (0750, `greetd`; SELinux type `xdm_var_lib_t` from `/usr/share/fenoa/selinux/fenoa-greeter.cil`, so the greeter may write its remembered session and scheme) and greetd's own home `/var/lib/greetd`, and links `greeter.toml` to the image copy in `/usr/share/fenoa/greeter/`, which sets the default session to `Hyprland (uwsm-managed)`. Keep appearance out of `greeter.toml`: its values win over the sync.
+- Noctalia's `[shell.greeter_sync] auto_sync` copies wallpaper, palette, font and monitor layout to the greeter whenever they change, through the packaged constrained polkit action (it runs exactly `noctalia-greeter-apply-appearance --sync <staging dir>` as root). `/usr/share/polkit-1/rules.d/49-fenoa-greeter-sync.rules` lets active local members of `wheel` do that without a password; anyone else gets an administrator prompt from Noctalia's polkit agent.
+- That rule is a convenience upstream leaves off by default: it means any process in your session can feed images to the greeter without asking. To require your password for every sync instead, mask it with an empty file of the same name: `sudo touch /etc/polkit-1/rules.d/49-fenoa-greeter-sync.rules` (polkit uses the `/etc` copy when both exist).
 - Avatars come from AccountsService: set one in Noctalia (Control Center) and the greeter shows it.
 - Fonts the greeter uses must be installed system-wide; fonts in `~/.local/share/fonts` are invisible to it.
 - `/etc/pam.d/greetd` (from Fedora's greetd) unlocks the GNOME keyring with the login password.
