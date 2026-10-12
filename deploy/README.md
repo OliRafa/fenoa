@@ -205,8 +205,8 @@ sudo deploy/fenoa-grow-esp --prune-only
 
 ## Images, signing & updates
 
-`.github/workflows/publish.yml` builds and pushes both images to GHCR on every merge to `main`
-(and weekly, to fold in base-image + security updates):
+`.github/workflows/publish.yml` builds and pushes both images to GHCR after every change on `main`
+that passes the image e2e workflow (and weekly, to fold in base-image + security updates):
 
 ```
 ghcr.io/olirafa/fenoa:44              # Hyprland + Noctalia, stock Asahi kernel-16k

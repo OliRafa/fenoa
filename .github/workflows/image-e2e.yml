@@ -24,6 +24,8 @@ on:
       - 'deploy/**'
       - 'Brewfile'
       - '.github/workflows/image-e2e.yml'
+  schedule:
+    - cron: '0 6 * * 1'   # weekly: base-image, kernel and security updates; publish.yml follows on success
   workflow_dispatch:
 
 concurrency:

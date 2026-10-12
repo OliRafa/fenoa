@@ -9,17 +9,15 @@ name: Publish images (GHCR)
 #
 # Also tagged :44-<shortsha> (immutable) and :latest. The platform stage is built as part of fenoa
 # and never pushed on its own.
+#
+# Runs only after "Image e2e" (install-to-disk, first boot, every smoke test) has passed for a push
+# to main or its weekly scheduled run, and builds exactly the commit that e2e tested; it repeats the
+# smoke tests on its own build before pushing anything.
 on:
-  push:
+  workflow_run:
+    workflows: ["Image e2e"]
+    types: [completed]
     branches: [main]
-    paths:
-      - 'images/**'
-      - 'system/**'
-      - 'packages/**'
-      - 'Brewfile'
-      - '.github/workflows/publish.yml'
-  schedule:
-    - cron: '0 6 * * 1'   # weekly rebuild to pick up base-image, kernel and security updates
   workflow_dispatch:
 
 concurrency:
@@ -33,12 +31,18 @@ permissions:
 
 jobs:
   publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'schedule'))
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 120
     env:
       FEDORA: "44"
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Compute image refs (GHCR requires a lowercase namespace)
         id: refs
@@ -47,7 +51,8 @@ jobs:
           {
             echo "fenoa=ghcr.io/$owner/fenoa"
             echo "fairydust=ghcr.io/$owner/fenoa-fairydust"
-            echo "sha=${GITHUB_SHA::12}"
+            sha="${{ github.event.workflow_run.head_sha || github.sha }}"
+            echo "sha=${sha::12}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Free up runner disk (image builds are space-hungry)
@@ -83,6 +88,7 @@ jobs:
         run: |
           ./images/fairydust/hack/smoke.sh "fenoa-fairydust:$FEDORA"
           KERNEL=fairydust ./images/fenoa/hack/platform-smoke.sh "fenoa-fairydust:$FEDORA"
+          ./images/fenoa/hack/desktop-smoke.sh "fenoa-fairydust:$FEDORA"
 
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin

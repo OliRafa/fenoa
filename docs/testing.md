@@ -33,7 +33,7 @@ CI: `.github/workflows/image-e2e.yml` on `ubuntu-24.04-arm`, building with rootf
 | `deploy/tests/esp-bootc-integration.sh` | `fenoa` | real `bootc install to-filesystem` over a fake Asahi ESP; the preboot layer survives |
 | `images/fairydust/hack/smoke.sh` | `fenoa-fairydust` | kernel swap, DP alt-mode and GPU drivers, PE vmlinuz, DTBs under `dtb/apple/`, rebuilt initramfs |
 
-`publish.yml` runs the smoke tests again before it pushes anything.
+`publish.yml` only runs after this workflow has passed for a push to `main` (or its weekly run), builds that exact commit, and repeats the smoke tests on its own build before it pushes anything.
 
 ## 3. Hardware: `images/boottest/`
 
