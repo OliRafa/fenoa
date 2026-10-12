@@ -264,7 +264,8 @@ RUN retry() { n=1; while ! "$@"; do [ "$n" -ge 5 ] && return 1; echo "[dnf-retry
 # D4) The desktop overlay: Hyprland defaults (/usr/share/fenoa/hypr) and Noctalia defaults
 #     (/usr/share/fenoa/noctalia) that the thin user configs in /etc/skel pull in; greetd + greeter
 #     config, its state-directory tmpfiles entry and SELinux label; the greeter-sync polkit rule; session
-#     environment, default terminal and default apps; the Flatpak app set; Apple-keyboard helpers.
+#     environment, portal routing, default terminal and default apps; the Flatpak app set;
+#     Apple-keyboard helpers.
 #     Copied after the packages so /etc/greetd/config.toml replaces the package's agreety default.
 COPY system/desktop/ /
 RUN set -eux; \

@@ -11,6 +11,7 @@ Fenoa's session is Hyprland (Lua config) managed by uwsm, with Noctalia v5 as th
 | Notifications, OSD | Noctalia | Noctalia owns `org.freedesktop.Notifications` |
 | Lock screen, idle | Noctalia | PAM service `login`; locks before suspend via a logind delay inhibitor; lock at 5 min, screen off at 5.5 min |
 | Polkit agent | Noctalia | `shell.polkit_agent = true`; Fenoa ships no other agent |
+| Keyring | gnome-keyring | unlocked with the login password (`/etc/pam.d/greetd`); Flatpak apps reach it through the Secret portal, which `/etc/xdg-desktop-portal/hyprland-portals.conf` routes to gnome-keyring because its portal only offers itself under GNOME (the other portals stay `hyprland`, then `gtk`) |
 | Clipboard history, screenshots, emoji, calculator | Noctalia | launcher providers `/emo`, `/calc`, `/win`, `/session`, `/wall` |
 | Night light | Noctalia | wlr-gamma-control; no hyprsunset |
 | Theming | Noctalia templates | `gtk3`, `gtk4` (adw-gtk3), `foot`, `hyprland` |

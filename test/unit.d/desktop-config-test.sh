@@ -87,6 +87,23 @@ if grep -qF 'org.noctalia.greeter.apply-appearance"' "$rule"; then
 fi
 pass "the greeter-sync polkit rule is the narrow constrained-action rule"
 
+# --- portals ---------------------------------------------------------------------------------------
+
+# gnome-keyring's portal only volunteers under GNOME (UseIn=gnome), so the Hyprland session names it
+# for the Secret interface. The /etc file replaces the package's whole hyprland-portals.conf, so it
+# must keep the package's default backends too.
+portals="$D/etc/xdg-desktop-portal/hyprland-portals.conf"
+[[ -f $portals ]] || fail "the Hyprland portal routing ships in /etc/xdg-desktop-portal"
+grep -qx '\[preferred\]' "$portals" || fail "hyprland-portals.conf has a [preferred] section"
+grep -qx 'default=hyprland;gtk' "$portals" || fail "hyprland-portals.conf keeps the package's default=hyprland;gtk"
+grep -qx 'org.freedesktop.impl.portal.Secret=gnome-keyring' "$portals" ||
+  fail "the Secret portal is routed to gnome-keyring"
+for p in gnome-keyring xdg-desktop-portal-hyprland xdg-desktop-portal-gtk; do
+  sed 's/#.*//' "$ROOT/packages/desktop.packages" | awk 'NF{print $1}' | grep -qx "$p" ||
+    fail "desktop.packages installs $p, which hyprland-portals.conf names"
+done
+pass "the Secret portal goes to gnome-keyring; the other portals stay hyprland, then gtk"
+
 # --- Hyprland Lua -----------------------------------------------------------------------------------
 
 grep -qF 'dofile("/usr/share/fenoa/hypr/bootstrap.lua")' "$skel_hypr" || fail "the seeded hyprland.lua loads the bootstrap"

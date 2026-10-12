@@ -49,6 +49,21 @@ getent passwd greetd >/dev/null && ok "greetd account exists" || no "greetd acco
 pam="$(cat /etc/pam.d/greetd 2>/dev/null || true)"
 case $pam in *pam_gnome_keyring.so*auto_start*) ok "login unlocks the GNOME keyring (pam_gnome_keyring)" ;; *) no "/etc/pam.d/greetd does not unlock the keyring" ;; esac
 
+# Flatpak apps reach that keyring through the Secret portal, which Fenoa routes to gnome-keyring.
+[[ -f /usr/share/xdg-desktop-portal/portals/gnome-keyring.portal ]] \
+  && ok "gnome-keyring ships a Secret portal" || no "gnome-keyring.portal missing"
+portals="$(cat /etc/xdg-desktop-portal/hyprland-portals.conf 2>/dev/null || true)"
+case $portals in
+  *$'\n'"org.freedesktop.impl.portal.Secret=gnome-keyring"*) ok "the Secret portal is routed to gnome-keyring" ;;
+  *) no "/etc/xdg-desktop-portal/hyprland-portals.conf does not route the Secret portal to gnome-keyring" ;;
+esac
+# The /etc copy replaces the package's file whole; it must still carry the package's default=.
+pkg_default="$(sed -n 's/^default=//p' /usr/share/xdg-desktop-portal/hyprland-portals.conf 2>/dev/null || true)"
+our_default="$(sed -n 's/^default=//p' /etc/xdg-desktop-portal/hyprland-portals.conf 2>/dev/null || true)"
+[[ -n $pkg_default && $our_default == "$pkg_default" ]] \
+  && ok "hyprland-portals.conf keeps the package's default=$pkg_default" \
+  || no "hyprland-portals.conf default=${our_default:-?} no longer matches the package's ${pkg_default:-?}"
+
 # tmpfiles must create the state dir owned by the greeter account, and link the image's greeter.toml.
 systemd-tmpfiles --create /usr/lib/tmpfiles.d/fenoa-greeter.conf >/dev/null 2>&1 || true
 state="$(stat -c '%a %U:%G' /var/lib/noctalia-greeter 2>/dev/null || true)"

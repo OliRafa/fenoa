@@ -14,7 +14,7 @@ Runs anywhere (CI: `.github/workflows/tests.yml` on ubuntu, plus shellcheck at e
   - `flatpak-provisioning-test.sh` — preinstall/update units and their build wiring
   - `widevine-test.sh` — CDM wiring into Flatpak profiles, the canonical-path hint, Brave's opt-in
   - `platform-overlay-test.sh` — Apple HID drop-ins reach the initramfs step, enabled units ship, sshd stays off (preset order, firewall), no Omarchy leftovers, shebangs
-  - `desktop-config-test.sh` — config parsing and cross-file agreement (greetd ↔ tmpfiles ↔ greeter, skel ↔ defaults, bindings ↔ helpers, Flatpaks ↔ default apps); runs `Hyprland --verify-config` when Hyprland is installed
+  - `desktop-config-test.sh` — config parsing and cross-file agreement (greetd ↔ tmpfiles ↔ greeter, skel ↔ defaults, bindings ↔ helpers, Flatpaks ↔ default apps, the Secret portal ↔ gnome-keyring); runs `Hyprland --verify-config` when Hyprland is installed
   - `desktop-helpers-test.sh` — `fenoa-kbd-backlight` and `fenoa-hypr-clamshell`
   - `keyboard-layout-test.sh` — Hyprland's layout derived from `localectl`'s XKB settings or the first-boot console keymap (via `kbd-model-map`), Latin layout first
   - `shell-setup-test.sh` — `/etc/profile.d/fenoa-shell.sh` wires starship, zoxide, fzf and eza into interactive bash only when installed
@@ -29,7 +29,7 @@ CI: `.github/workflows/image-e2e.yml` on `ubuntu-24.04-arm`, building with rootf
 | Script | Against | Checks |
 |---|---|---|
 | `images/fenoa/hack/platform-smoke.sh` | platform stage, `fenoa`, `fenoa-fairydust` (`KERNEL=fairydust`) | Asahi base, one kernel, systemd-boot, masked grub units, initramfs (composefs pivot, Apple HID), m1n1 wiring, first-boot/Flatpak/brew units, services, sshd off (also after a preset pass) and closed in firewalld, tuning files, no Omarchy |
-| `images/fenoa/hack/desktop-smoke.sh` | `fenoa`, `fenoa-fairydust` | packages, greetd as display manager, greeter account/PAM/state dir, the greeter finds its default session, polkit rule ↔ packaged action, `noctalia config validate` and `Hyprland --verify-config` on the seeded config, default apps |
+| `images/fenoa/hack/desktop-smoke.sh` | `fenoa`, `fenoa-fairydust` | packages, greetd as display manager, greeter account/PAM/state dir, the Secret portal routed to gnome-keyring, the greeter finds its default session, polkit rule ↔ packaged action, `noctalia config validate` and `Hyprland --verify-config` on the seeded config, default apps |
 | `images/fenoa/hack/first-boot.sh` | platform stage; `fenoa` with `DESKTOP=1` | preseeded user creation under a populated machine-id and a DynamicUser account, marker, scrubbing, idempotence, skel seeding, `systemd-analyze verify` |
 | `images/fenoa/hack/install-to-disk.sh` | `fenoa` | real `bootc install to-disk --composefs-backend --bootloader systemd`, inspected by loop mount |
 | `deploy/tests/esp-bootc-integration.sh` | `fenoa` | real `bootc install to-filesystem` over a fake Asahi ESP; the preboot layer survives |
