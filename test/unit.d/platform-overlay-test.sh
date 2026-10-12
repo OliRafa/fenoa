@@ -76,3 +76,11 @@ while IFS= read -r script; do
   [[ $first == "#!/bin/bash" ]] || fail "$script uses #!/bin/bash" "got: $first"
 done < <("$ROOT/test/shell-files" | grep -vE '^deploy/lib/|/profile.d/|^test/unit.d/base-test.sh$')
 pass "every executable shell script uses #!/bin/bash (sourced files are exempt)"
+
+# A script committed without its executable bit fails wherever it is run directly (CI runs the image
+# tests as ./images/...). The Containerfiles chmod the overlay helpers anyway; the repo copy must
+# match. base-test.sh is only ever sourced.
+while IFS= read -r script; do
+  [[ -x $ROOT/$script ]] || fail "$script is executable"
+done < <("$ROOT/test/shell-files" | grep -vE '^deploy/lib/|/profile.d/|^test/unit.d/base-test.sh$')
+pass "every executable shell script has its executable bit"
