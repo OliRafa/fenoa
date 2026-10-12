@@ -6,6 +6,11 @@
 #   fail DESC [DETAIL]   prints DETAIL to stderr, then "not ok - DESC", and exits 1 — the first
 #                        failed assertion ends the file (test/unit keeps going with the next file)
 #   require_command CMD  fails unless CMD is on PATH
+#   containerfile_units VERB < TEXT
+#                        the units a Containerfile (stage) passes to `systemctl VERB`, one per line
+#   check_preset PRESET STAGE_TEXT [INSTALLED_NAME]
+#                        fails unless PRESET covers every unit STAGE_TEXT enables, disables or makes
+#                        the default target, and is shaped and named so systemd reads it first
 #
 # Stub commands by writing executables into a temp dir and putting it first on PATH.
 
@@ -34,4 +39,40 @@ require_command() {
   local command="$1"
 
   command -v "$command" >/dev/null || fail "required command is available: $command"
+}
+
+containerfile_units() {
+  local verb="$1"
+
+  # Comments out, continued lines joined, then the unit names after `systemctl VERB` (so neither
+  # `systemctl mask` nor `systemctl --global ...` counts).
+  sed -e '/^[[:space:]]*#/d' |
+    sed -e ':a' -e '/\\$/N; s/\\\n//; ta' |
+    grep -oE "systemctl $verb [^;&|]*" |
+    tr ' ' '\n' |
+    grep -E '^[A-Za-z0-9@._-]+\.(service|socket|timer|target|path|mount)$' |
+    sort -u
+}
+
+# A first boot runs a FULL preset pass and Fedora's 99-default-disable.preset disables whatever no
+# preset lists, so every unit an image enables (or makes the default target) needs an `enable`
+# line, and every unit it disables a `disable` line, in a preset systemd reads before Fedora's.
+check_preset() {
+  local preset="$1" text="$2" name="${3:-$(basename "$1")}" bad dupes unit
+
+  [[ -f $preset ]] || fail "$name ships"
+  bad=$(grep -vE '^[[:space:]]*(#.*)?$' "$preset" | grep -vE '^(enable|disable) [A-Za-z0-9@._-]+$' || true)
+  [[ -z $bad ]] || fail "$name holds only 'enable UNIT' / 'disable UNIT' lines" "$bad"
+  [[ $name == *.preset && $name < "81-" ]] || fail "$name sorts before Fedora's preset files (81- and up)"
+  dupes=$(awk '$1 == "enable" || $1 == "disable" { print $2 }' "$preset" | sort | uniq -d)
+  [[ -z $dupes ]] || fail "$name lists each unit once" "$dupes"
+
+  while read -r unit; do
+    [[ -z $unit ]] || grep -qx "enable $unit" "$preset" ||
+      fail "$name enables $unit, which the Containerfile enables (or makes the default target)"
+  done < <(printf '%s\n' "$text" | containerfile_units enable; printf '%s\n' "$text" | containerfile_units set-default)
+  while read -r unit; do
+    [[ -z $unit ]] || grep -qx "disable $unit" "$preset" ||
+      fail "$name disables $unit, which the Containerfile disables"
+  done < <(printf '%s\n' "$text" | containerfile_units disable)
 }

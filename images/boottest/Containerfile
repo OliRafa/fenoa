@@ -11,6 +11,7 @@ FROM ${BASE}
 
 COPY images/boottest/boot-smoke.sh /usr/libexec/fenoa-boot-smoke
 COPY images/boottest/fenoa-boottest.service /usr/lib/systemd/system/fenoa-boottest.service
+COPY images/boottest/fenoa-boottest.preset /usr/lib/systemd/system-preset/50-fenoa-boottest.preset
 RUN chmod +x /usr/libexec/fenoa-boot-smoke \
  && systemctl enable fenoa-boottest.service \
  && bootc container lint

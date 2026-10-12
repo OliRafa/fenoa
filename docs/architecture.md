@@ -25,7 +25,7 @@ The split follows one rule: the **platform** stage holds everything a non-graphi
 | P4 | `COPY system/platform/ /` | units, helpers, tuning drop-ins, Apple HID modprobe/dracut config |
 | P5 | rebuild the initramfs with the `bootc` dracut module | composefs pivot; Apple HID drivers loaded early |
 | P6 | `DTBS` → image devicetree; enable `fenoa-apply-m1n1` | m1n1/devicetree refresh on atomic |
-| P7 | enable `fenoa-firstboot-user`, `systemd-firstboot` | the image ships no user |
+| P7 | enable `fenoa-firstboot-user` (`systemd-firstboot` is static and needs no enabling) | the image ships no user |
 | P8 | ublue brew tree + Brewfile; baked Flathub remote; enable provisioning units | `/var` is seeded only on first boot |
 | P9 | enable system services; mask NetworkManager-wait-online; disable sshd and drop `ssh` from the default firewalld zone | SSH is opt-in; `50-fenoa.preset` keeps a preset pass from re-enabling sshd |
 | P10 | clean residue; `bootc container lint` | |
@@ -56,6 +56,8 @@ Copies the fairydust kernel tree in, removes every other kernel, runs `depmod`, 
 | `/var/lib/fenoa` | runtime | first-boot markers and the m1n1 stamp |
 | `/var/lib/noctalia-greeter` | runtime (tmpfiles) | greeter state; `greeter.toml` is a link back into `/usr/share/fenoa/greeter` |
 | `/var/lib/flatpak`, `/home/linuxbrew` | runtime | Flatpak apps and the Homebrew prefix, provisioned on first boot and updated on their own timers |
+
+Every unit a Containerfile enables or disables (or makes the default target) also has a line in that stage's preset file, `/usr/lib/systemd/system-preset/50-fenoa.preset` or `50-fenoa-desktop.preset`. A first boot makes systemd run a full preset pass, which sets every unit to what the presets say and, through Fedora's `99-default-disable.preset`, disables anything they do not list; without those lines it would switch off greetd and the first-boot units. The smoke tests run `systemctl preset-all` in the image and require that nothing changes.
 
 `/var` is created from the image only on the first boot of a deployment and never updated by `bootc upgrade`, so nothing in the image may rely on content baked into `/var`; directories come from `tmpfiles.d`, state from first-boot units.
 

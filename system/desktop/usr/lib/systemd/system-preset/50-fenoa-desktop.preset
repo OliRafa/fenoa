@@ -1,0 +1,13 @@
+# Fenoa's service presets for the desktop stage. Every unit images/fenoa/Containerfile enables in
+# the desktop stage needs a line here, for the reason given in 50-fenoa.preset: a first boot runs a
+# full preset pass, and 99-default-disable.preset disables whatever no preset lists.
+
+# The login screen (D5). Fedora's 85-display-manager.preset enables gdm, sddm and the like but not
+# greetd, so without this line the first boot would disable greetd and come up with no greeter.
+enable greetd.service
+
+# D5's `systemctl set-default graphical.target` is the symlink /etc/systemd/system/default.target.
+# graphical.target has no [Install] section, so a full preset pass "disables" it by deleting that
+# link, and the default falls back to the base image's /usr/lib/systemd/system/default.target
+# (graphical.target today). This line keeps the image's own choice in place.
+enable graphical.target

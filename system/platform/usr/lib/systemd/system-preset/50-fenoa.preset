@@ -1,11 +1,47 @@
-# Fenoa's service presets. systemd reads the preset files of every directory as one list sorted by
-# file name, and the first line that matches a unit wins, so this file (50-) overrides Fedora's
-# 90-default.preset, which says `enable sshd.service`.
+# Fenoa's service presets for the platform stage. systemd reads the preset files of every directory
+# as one list sorted by file name, and the first line that matches a unit wins, so this file (50-)
+# overrides Fedora's 85-, 90- and 99- files.
 #
-# The build disables sshd (images/fenoa/Containerfile, P9), but a disable alone does not survive a
-# preset pass: systemd applies the presets on a first boot (an absent or "uninitialized"
-# /etc/machine-id; the image's empty one does not count), and Fedora's would re-enable sshd.
-#
-# SSH is opt-in: `sudo systemctl enable --now sshd`, then let it through the firewall with
+# A first boot (an absent or "uninitialized" /etc/machine-id) makes systemd run a FULL preset pass:
+# Fedora's systemd sets every unit to what the presets say, and 99-default-disable.preset says
+# `disable *` for anything not listed. So every unit images/fenoa/Containerfile enables or disables
+# has a line here, or the first boot would switch it back; platform-smoke.sh asserts that a full
+# `systemctl preset-all` changes nothing. Masks are left alone by presets.
+
+# SSH is opt-in (P9): Fedora's 90-default.preset enables sshd. To turn it on yourself:
+# `sudo systemctl enable --now sshd`, then let it through the firewall with
 # `sudo firewall-cmd --permanent --add-service=ssh && sudo firewall-cmd --reload`.
 disable sshd.service
+
+# systemd-homed-firstboot runs `homectl firstboot --prompt-new-user` on a first boot, before user
+# sessions start. Nothing enables it today (99-default-disable), but if a preset ever did, the first
+# boot would ask for a user twice: homed's UIDs (60001-60513) sit above login.defs' UID_MAX (60000),
+# so fenoa-firstboot-user would not count that account and would create a second one.
+disable systemd-homed-firstboot.service
+
+# The m1n1 refresh and first-boot provisioning (P6-P8). Without these lines a first boot would
+# disable the unit that creates the user account.
+enable fenoa-apply-m1n1.service
+enable fenoa-firstboot-user.service
+enable fenoa-flatpak-preinstall.service
+enable fenoa-flatpak-update.timer
+enable fenoa-brew-setup.service
+enable brew-setup.service
+enable brew-update.timer
+enable brew-upgrade.timer
+
+# System services (P9). Fedora's presets enable most of these too; listing them keeps the image's
+# choice from depending on that. Fedora deliberately leaves cups.service to socket activation
+# (cups.socket, cups.path) and does not preset cups-browsed at all; Fenoa runs both from boot so
+# driverless network printers are discovered (/etc/cups/cups-browsed.conf).
+enable NetworkManager.service
+enable bluetooth.service
+enable firewalld.service
+enable systemd-resolved.service
+enable avahi-daemon.service
+enable power-profiles-daemon.service
+enable cups.service
+enable cups-browsed.service
+enable docker.socket
+enable systemd-oomd.service
+enable fstrim.timer

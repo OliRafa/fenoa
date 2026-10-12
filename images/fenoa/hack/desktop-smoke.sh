@@ -141,6 +141,29 @@ zone="$(firewall-offline-cmd --get-default-zone 2>/dev/null || true)"
 [[ "$(firewall-offline-cmd --zone="$zone" --query-service=localsend 2>/dev/null)" == "yes" ]] \
   && ok "LocalSend's port is open in the $zone zone" || no "localsend service not enabled in the default firewalld zone"
 
+echo "== first boot: the preset pass keeps the login screen =="
+# A first boot makes systemd run a FULL `systemctl preset-all`: every unit is set to what the
+# presets say, and Fedora's 99-default-disable.preset disables anything they do not list. Do the same
+# here (the container is thrown away) and require that it changes no unit-file state, enablement
+# link or default target, i.e. the presets keep the image exactly as built.
+unit_state() {
+  systemctl list-unit-files --no-legend --no-pager 2>/dev/null | awk '{ print $1, $2 }'
+  find /etc/systemd/system /etc/systemd/user -type l -printf 'link %P -> %l\n' 2>/dev/null
+  echo "default.target: $(systemctl get-default 2>/dev/null)"
+}
+before="$(unit_state | sort)"
+if preset_out="$(systemctl preset-all 2>&1)"; then
+  after="$(unit_state | sort)"
+  changes="$(diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") || true)"
+  [[ -z $changes ]] && ok "systemctl preset-all changes nothing (greetd and graphical.target survive a first boot)" || no "a first boot's preset pass would change the image:"$'\n'"$changes"
+else
+  no "systemctl preset-all failed: $preset_out"
+fi
+dm="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)"
+[[ $dm == */greetd.service && "$(systemctl get-default 2>/dev/null)" == "graphical.target" ]] \
+  && ok "after the preset pass greetd is still the display manager, booting graphical.target" \
+  || no "after the preset pass the display manager is '${dm:-unset}', default $(systemctl get-default 2>/dev/null)"
+
 echo
 if [[ $fail == "0" ]]; then echo "DESKTOP SMOKE: PASS"; else echo "DESKTOP SMOKE: FAIL"; fi
 exit "$fail"

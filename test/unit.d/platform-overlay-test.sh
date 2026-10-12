@@ -52,16 +52,25 @@ for f in "$overlay"/usr/lib/systemd/system/fenoa-*.service; do
 done
 pass "every fenoa-* service has an ExecStart whose helper ships"
 
-# --- SSH is opt-in ------------------------------------------------------------------------------
+# --- presets: a first boot keeps every unit as built --------------------------------------------
 
-# Fedora's 90-default.preset enables sshd. Presets are read as one list sorted by file name and the
-# first match wins, so Fenoa's must sort before it, or a preset pass re-enables sshd.
-preset="$overlay/usr/lib/systemd/system-preset/50-fenoa.preset"
-[[ -f $preset ]] || fail "the Fenoa preset file ships"
-grep -qx 'disable sshd.service' "$preset" || fail "the preset disables sshd.service"
-preset_name=$(basename "$preset")
-[[ $preset_name < "90-default.preset" ]] || fail "$preset_name sorts before Fedora's 90-default.preset"
-pass "$preset_name disables sshd and wins over Fedora's 90-default.preset"
+platform_stage=$(sed -n '/^FROM .* AS platform$/,/^FROM platform AS desktop$/p' "$containerfile")
+[[ -n $platform_stage ]] || fail "the Containerfile has a platform stage"
+[[ -n $(printf '%s\n' "$platform_stage" | containerfile_units enable) ]] ||
+  fail "the platform stage's systemctl enables can be read (else the coverage check proves nothing)"
+check_preset "$overlay/usr/lib/systemd/system-preset/50-fenoa.preset" "$platform_stage"
+pass "50-fenoa.preset covers every unit the platform stage enables or disables, read before Fedora's"
+
+# Fedora's 90-default.preset enables sshd; first match wins, so this line keeps it off.
+grep -qx 'disable sshd.service' "$overlay/usr/lib/systemd/system-preset/50-fenoa.preset" ||
+  fail "50-fenoa.preset disables sshd.service"
+pass "50-fenoa.preset disables sshd"
+
+boottest="$ROOT/images/boottest/Containerfile"
+installed=$(sed -n 's|^COPY images/boottest/fenoa-boottest.preset /usr/lib/systemd/system-preset/\(.*\)$|\1|p' "$boottest")
+[[ -n $installed ]] || fail "the boottest image installs its preset"
+check_preset "$ROOT/images/boottest/fenoa-boottest.preset" "$(cat "$boottest")" "$installed"
+pass "the boottest image's preset ($installed) covers the unit it enables"
 
 grep -qF 'systemctl disable sshd.service' "$containerfile" || fail "the Containerfile disables sshd"
 grep -qF -- '--remove-service-from-zone=ssh' "$containerfile" ||

@@ -98,6 +98,15 @@ if grep -qF 'org.noctalia.greeter.apply-appearance"' "$rule"; then
 fi
 pass "the greeter-sync polkit rule is the narrow constrained-action rule"
 
+# --- presets: a first boot keeps the login screen ----------------------------------------------------
+
+desktop_stage=$(sed -n '/^FROM platform AS desktop$/,$p' "$containerfile")
+[[ -n $desktop_stage ]] || fail "the Containerfile has a desktop stage"
+check_preset "$D/usr/lib/systemd/system-preset/50-fenoa-desktop.preset" "$desktop_stage"
+grep -qx 'enable greetd.service' "$D/usr/lib/systemd/system-preset/50-fenoa-desktop.preset" ||
+  fail "50-fenoa-desktop.preset enables greetd"
+pass "50-fenoa-desktop.preset covers greetd and graphical.target, read before Fedora's presets"
+
 # --- portals ---------------------------------------------------------------------------------------
 
 # gnome-keyring's portal only volunteers under GNOME (UseIn=gnome), so the Hyprland session names it

@@ -82,9 +82,10 @@ RUN set -eux; \
     done
 
 # P4) The platform overlay: first-boot/m1n1/provisioning units and helpers, system tuning drop-ins,
-#     and the Apple HID modprobe/dracut configuration. Copied AFTER the package install so the
-#     packages' %config files (cups-browsed.conf) are replaced rather than left as .rpmnew, and
-#     BEFORE P5 so the initramfs picks up the dracut and modprobe drop-ins.
+#     the Apple HID modprobe/dracut configuration, and 50-fenoa.preset, which lists every unit this
+#     stage enables or disables so a first boot's preset pass keeps them. Copied AFTER the package
+#     install so the packages' %config files (cups-browsed.conf) are replaced rather than left as
+#     .rpmnew, and BEFORE P5 so the initramfs picks up the dracut and modprobe drop-ins.
 COPY system/platform/ /
 RUN chmod 0755 /usr/libexec/fenoa-* /usr/bin/fenoa-* /usr/lib/systemd/system-sleep/fenoa-* \
  && chmod 0440 /etc/sudoers.d/fenoa-* \
@@ -149,10 +150,10 @@ RUN set -eux; \
 #     `to-existing-root` convert does NOT import the underlying OS's user, so the greeter would have
 #     no account to offer. fenoa-firstboot-user creates the primary user once (preseed via
 #     /etc/fenoa/firstboot-user.conf, else an interactive tty1 prompt), ordered before the display
-#     manager. systemd-firstboot handles root password / locale / timezone / hostname.
+#     manager. systemd-firstboot handles root password / locale / timezone / hostname; it is a
+#     static unit (sysinit.target wants it) that runs on a first boot, so there is nothing to enable.
 RUN set -eux; \
-    systemctl enable fenoa-firstboot-user.service; \
-    systemctl enable systemd-firstboot.service 2>/dev/null || true
+    systemctl enable fenoa-firstboot-user.service
 
 # P8) Homebrew + Flatpak first-boot provisioning. Neither can live in /usr as a working install:
 #     Homebrew needs a writable prefix owned by a human user, and Flatpaks live in /var/lib/flatpak,
@@ -266,7 +267,8 @@ RUN retry() { n=1; while ! "$@"; do [ "$n" -ge 5 ] && return 1; echo "[dnf-retry
 #     (/usr/share/fenoa/noctalia) that the thin user configs in /etc/skel pull in; greetd + greeter
 #     config, its state-directory tmpfiles entry and SELinux label; the greeter-sync polkit rule; session
 #     environment, portal routing, default terminal and default apps; the Flatpak app set;
-#     Apple-keyboard helpers.
+#     Apple-keyboard helpers; and 50-fenoa-desktop.preset, which keeps greetd and graphical.target
+#     through a first boot's preset pass.
 #     Copied after the packages so /etc/greetd/config.toml replaces the package's agreety default.
 COPY system/desktop/ /
 RUN set -eux; \

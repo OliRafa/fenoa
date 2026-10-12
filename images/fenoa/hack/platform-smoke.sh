@@ -175,6 +175,31 @@ visudo -cf /etc/sudoers.d/fenoa-passwd-tries >/dev/null 2>&1 && ok "sudoers drop
 [[ "$(stat -c %a /etc/sudoers.d/fenoa-passwd-tries 2>/dev/null)" == "440" ]] && ok "sudoers drop-in is 0440" || no "sudoers drop-in mode is not 0440"
 [[ -x /usr/bin/fenoa-widevine ]] && ok "fenoa-widevine on PATH" || no "fenoa-widevine missing"
 
+echo "== first boot: the preset pass keeps every unit as built =="
+# A first boot makes systemd run a FULL `systemctl preset-all`: every unit is set to what the
+# presets say, and Fedora's 99-default-disable.preset disables anything they do not list. Do the same
+# here (the container is thrown away) and require that it changes no unit-file state, enablement
+# link or default target, i.e. the presets keep the image exactly as built.
+unit_state() {
+  systemctl list-unit-files --no-legend --no-pager 2>/dev/null | awk '{ print $1, $2 }'
+  find /etc/systemd/system /etc/systemd/user -type l -printf 'link %P -> %l\n' 2>/dev/null
+  echo "default.target: $(systemctl get-default 2>/dev/null)"
+}
+before="$(unit_state | sort)"
+if preset_out="$(systemctl preset-all 2>&1)"; then
+  after="$(unit_state | sort)"
+  changes="$(diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") || true)"
+  [[ -z $changes ]] && ok "systemctl preset-all changes nothing (50-fenoa.preset covers every unit the build enables)" || no "a first boot's preset pass would change the image:"$'\n'"$changes"
+else
+  no "systemctl preset-all failed: $preset_out"
+fi
+# homectl's first-boot prompt would ask for a second user (see 50-fenoa.preset).
+homed_firstboot="$(systemctl is-enabled systemd-homed-firstboot.service 2>/dev/null || true)"
+case $homed_firstboot in
+  enabled*) no "systemd-homed-firstboot.service is enabled (a second user prompt on first boot)" ;;
+  *) ok "systemd-homed-firstboot.service is not enabled (${homed_firstboot:-not found})" ;;
+esac
+
 echo "== no Omarchy =="
 leftovers="$(ls -d /usr/share/omarchy /usr/bin/omarchy* /usr/libexec/omarchy* /etc/omarchy* /usr/lib/systemd/system/omarchy* 2>/dev/null || true)"
 [[ -z $leftovers ]] && ok "no omarchy files" || no "omarchy files present: $leftovers"
