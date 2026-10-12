@@ -51,6 +51,8 @@ Then, for DRM video in Brave: open Brave once, and run `fenoa-widevine`.
 
 - `Super + Space` opens the launcher, `Super + Return` a terminal, `Super + Escape` the session menu. The full list is in [docs/desktop.md](docs/desktop.md).
 - Your config is `~/.config/hypr/hyprland.lua` and `~/.config/noctalia/config.toml`; both load Fenoa's defaults from `/usr/share/fenoa` first, so image updates keep improving the defaults without touching your changes.
+- SSH is off: `sshd` is disabled and the firewall does not let it in. To log in remotely, run `sudo systemctl enable --now sshd` and `sudo firewall-cmd --permanent --add-service=ssh && sudo firewall-cmd --reload`.
+- Upgrading from an earlier Fenoa image switches SSH off as well; if you relied on it, run those two commands again after the upgrade.
 
 ## Update
 

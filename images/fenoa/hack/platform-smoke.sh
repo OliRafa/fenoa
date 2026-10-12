@@ -141,6 +141,26 @@ systemctl is-enabled docker.socket >/dev/null 2>&1 && ok "docker.socket enabled"
 [[ "$(readlink -f /etc/systemd/system/NetworkManager-wait-online.service)" == "/dev/null" ]] \
   && ok "NetworkManager-wait-online masked" || no "NetworkManager-wait-online not masked"
 
+# SSH is opt-in: sshd off, and the default zone does not let it in.
+grep -qx 'disable sshd.service' /usr/lib/systemd/system-preset/50-fenoa.preset 2>/dev/null \
+  && ok "50-fenoa.preset disables sshd" || no "no preset disables sshd (Fedora's 90-default enables it)"
+if [[ -f /usr/lib/systemd/system/sshd.service ]]; then
+  sshd_state="$(systemctl is-enabled sshd.service 2>/dev/null || true)"
+  [[ $sshd_state == "disabled" ]] && ok "sshd disabled (SSH is opt-in)" || no "sshd is '${sshd_state:-unknown}', not disabled"
+  # What a first-boot preset pass would do; the container is thrown away afterwards.
+  if preset_out="$(systemctl preset sshd.service 2>&1)"; then
+    sshd_state="$(systemctl is-enabled sshd.service 2>/dev/null || true)"
+    [[ $sshd_state == "disabled" ]] && ok "applying the presets keeps sshd disabled" || no "the presets re-enable sshd ($sshd_state)"
+  else
+    no "systemctl preset sshd.service failed: $preset_out"
+  fi
+else
+  ok "sshd is not installed"
+fi
+zone="$(firewall-offline-cmd --get-default-zone 2>/dev/null || true)"
+ssh_allowed="$(firewall-offline-cmd --zone="$zone" --query-service=ssh 2>/dev/null || true)"
+[[ $ssh_allowed == "no" ]] && ok "the $zone zone does not allow ssh" || no "the $zone zone allows ssh (${ssh_allowed:-query failed})"
+
 echo "== system tuning =="
 for f in /usr/lib/sysctl.d/99-fenoa-sysctl.conf /usr/lib/sysctl.d/90-fenoa-file-watchers.conf \
          /usr/lib/udev/rules.d/60-fenoa-io-scheduler.rules /usr/lib/systemd/zram-generator.conf.d/90-fenoa.conf \

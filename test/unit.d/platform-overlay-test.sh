@@ -52,6 +52,22 @@ for f in "$overlay"/usr/lib/systemd/system/fenoa-*.service; do
 done
 pass "every fenoa-* service has an ExecStart whose helper ships"
 
+# --- SSH is opt-in ------------------------------------------------------------------------------
+
+# Fedora's 90-default.preset enables sshd. Presets are read as one list sorted by file name and the
+# first match wins, so Fenoa's must sort before it, or a preset pass re-enables sshd.
+preset="$overlay/usr/lib/systemd/system-preset/50-fenoa.preset"
+[[ -f $preset ]] || fail "the Fenoa preset file ships"
+grep -qx 'disable sshd.service' "$preset" || fail "the preset disables sshd.service"
+preset_name=$(basename "$preset")
+[[ $preset_name < "90-default.preset" ]] || fail "$preset_name sorts before Fedora's 90-default.preset"
+pass "$preset_name disables sshd and wins over Fedora's 90-default.preset"
+
+grep -qF 'systemctl disable sshd.service' "$containerfile" || fail "the Containerfile disables sshd"
+grep -qF -- '--remove-service-from-zone=ssh' "$containerfile" ||
+  fail "the Containerfile removes ssh from the default firewalld zone"
+pass "the Containerfile disables sshd and closes ssh in the default firewalld zone"
+
 # --- package list hygiene -----------------------------------------------------------------------
 
 dupes=$(sed 's/#.*//' "$packages" | awk 'NF{print $1}' | sort | uniq -d)

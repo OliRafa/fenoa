@@ -1,0 +1,11 @@
+# Fenoa's service presets. systemd reads the preset files of every directory as one list sorted by
+# file name, and the first line that matches a unit wins, so this file (50-) overrides Fedora's
+# 90-default.preset, which says `enable sshd.service`.
+#
+# The build disables sshd (images/fenoa/Containerfile, P9), but a disable alone does not survive a
+# preset pass: systemd applies the presets on a first boot (an absent or "uninitialized"
+# /etc/machine-id; the image's empty one does not count), and Fedora's would re-enable sshd.
+#
+# SSH is opt-in: `sudo systemctl enable --now sshd`, then let it through the firewall with
+# `sudo firewall-cmd --permanent --add-service=ssh && sudo firewall-cmd --reload`.
+disable sshd.service
