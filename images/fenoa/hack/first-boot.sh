@@ -6,10 +6,11 @@
 # /etc/skel seeding the new home with the Hyprland/Noctalia config. Also validates the shipped units
 # with systemd-analyze.
 #
-# The unit's GATING is covered in A0/A: it once used ConditionFirstBoot=yes, which systemd latches
-# from an empty /etc/machine-id — nothing ships one empty, so on real hardware the unit silently
-# skipped and the greeter had no account. We populate /etc/machine-id before provisioning, so this
-# test runs in exactly the state that used to break it.
+# The unit's GATING is covered in A0/A: it gates on its own marker, not ConditionFirstBoot. The image
+# ships /etc/machine-id as "uninitialized", so systemd does detect an install's first boot, but it
+# commits a real ID during that boot; the retry after an aborted prompt or a failed useradd happens
+# on a boot that is no longer a first boot. We populate /etc/machine-id before provisioning, so this
+# test runs in exactly that state.
 #
 # NOT covered here — needs a real booted session (images/boottest/ on a Mac): the tty1 interactive
 # prompt and the greeter handoff.
@@ -46,9 +47,10 @@ case $unit_text in
 esac
 
 echo "== A) fenoa-firstboot-user (preseed) creates the primary user =="
-# Reproduce the field condition first: a POPULATED /etc/machine-id (ConditionFirstBoot=no).
-systemd-machine-id-setup >/dev/null 2>&1 || head -c16 /dev/urandom | od -An -tx1 | tr -d ' \n' >/etc/machine-id
-[[ -s /etc/machine-id ]] && ok "/etc/machine-id populated (simulating a non-first boot)" || no "could not populate /etc/machine-id"
+# Run as a later boot would: a POPULATED /etc/machine-id (ConditionFirstBoot=no). Written directly:
+# systemd-machine-id-setup leaves the image's "uninitialized" in place.
+printf '%s\n' "$(head -c16 /dev/urandom | od -An -tx1 | tr -d ' \n')" >/etc/machine-id
+[[ "$(cat /etc/machine-id)" =~ ^[0-9a-f]{32}$ ]] && ok "/etc/machine-id populated (simulating a non-first boot)" || no "could not populate /etc/machine-id"
 # And a systemd DynamicUser= account, the way nss-systemd surfaces one: speakersafetyd on Asahi runs
 # at uid 62454. A naive uid>=1000 "is there a human user" test counts it, and the helper then skips
 # on a machine with no human user at all.

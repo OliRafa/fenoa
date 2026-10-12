@@ -97,6 +97,22 @@ if getent passwd | awk -F: '$3>=1000 && $3<60000 {f=1} END{exit !f}'; then
 else
   ok "no human user baked in"
 fi
+# systemd counts a boot as the first only when /etc/machine-id is absent or reads "uninitialized"
+# (an empty file does not count); only then does systemd-firstboot run and the preset pass apply.
+machine_id="$(cat /etc/machine-id 2>/dev/null || true)"
+[[ $machine_id == "uninitialized" ]] && ok "/etc/machine-id reads uninitialized (an install detects its first boot)" \
+  || no "/etc/machine-id is '${machine_id:-empty or absent}', not uninitialized (systemd-firstboot would not run)"
+# systemd-firstboot silently skips a question whose answer is already configured: the locale,
+# keymap or timezone when its file exists, the root password unless root's shadow field is
+# "!unprovisioned". The docs promise the first three questions and no root password.
+for f in /etc/locale.conf /etc/vconsole.conf /etc/localtime; do
+  [[ ! -e $f && ! -L $f ]] && ok "the image ships no $f (systemd-firstboot asks for it)" \
+    || no "the image ships $f (systemd-firstboot would skip its question)"
+done
+root_shadow="$(awk -F: '$1 == "root" { print $2 }' /etc/shadow 2>/dev/null || true)"
+[[ -n $root_shadow && $root_shadow != "!unprovisioned" ]] \
+  && ok "root's shadow entry is set ('$root_shadow'), so systemd-firstboot asks for no root password" \
+  || no "root's shadow field is '${root_shadow:-missing}' (systemd-firstboot would prompt for a root password)"
 
 echo "== Flatpak provisioning =="
 command -v flatpak >/dev/null 2>&1 && ok "flatpak" || no "flatpak missing"

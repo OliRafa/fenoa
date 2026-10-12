@@ -251,7 +251,7 @@ log in.
 
 So the image creates the primary user **once, on first boot**, before the display manager:
 
-- **`systemd-firstboot`** — locale, keymap, timezone, root password (the hostname is not prompted; set it with `hostnamectl hostname <name>`).
+- **`systemd-firstboot`** — locale, keymap and timezone, on tty1. It runs because the image ships `/etc/machine-id` as `uninitialized`, which systemd counts as a first boot (an empty file would not). It prompts for neither the hostname (set one with `hostnamectl hostname <name>`) nor a root password: the image already has a locked root entry, which systemd-firstboot treats as configured, and the user created next is in `wheel`. For an unattended first boot it reads the `firstboot.locale`, `firstboot.keymap` and `firstboot.timezone` credentials instead of prompting (for example `systemd.set_credential=firstboot.keymap:de` on the kernel command line; see systemd-firstboot(1)).
 - **`fenoa-firstboot-user.service`** — the human account (added to `wheel` ⇒ sudo). Two modes:
   - **Interactive** (default): prompts on tty1 for username / full name / password.
   - **Preseed**: if `/etc/fenoa/firstboot-user.conf` exists it's read non-interactively, then
@@ -265,10 +265,9 @@ So the image creates the primary user **once, on first boot**, before the displa
     ```
   - Before either: if `/etc/vconsole.conf` carries a console `KEYMAP` with no XKB settings (systemd-firstboot does not convert every keymap) that the desktop's fallback table cannot map either, it adds the XKB layout known for `ua`, `bg-cp1251`, `kyrgyz` and `de_CH-latin1`, so the greeter and the desktop use it too; for any other keymap the interactive prompt warns that they will use the US layout.
 
-The unit is gated on a marker in `/var/lib/fenoa` (not `ConditionFirstBoot`, which silently skips
-when the image carries a populated `/etc/machine-id`) and self-skips if any human account in the
-`login.defs` UID range already exists — so it's a no-op on a system that already has a user. The
-marker is written only once a user exists, so an aborted prompt retries on the next boot.
+The unit is gated on a marker in `/var/lib/fenoa`, not on `ConditionFirstBoot`. An empty `/etc/machine-id` is not a first boot (an earlier `ConditionFirstBoot` gate silently skipped on hardware for that reason); the image now ships `uninitialized`, so the first boot is detected, but systemd commits a real machine ID during that boot, and the marker is written only once a user exists, so an aborted prompt or a failed `useradd` retries on the next boot. The unit also self-skips if any human account in the `login.defs` UID range already exists, so it's a no-op on a system that already has a user.
+
+An upgrade keeps the machine ID: by then `/etc/machine-id` holds the ID systemd wrote, which differs from what the old image shipped, so bootc's `/etc` three-way merge keeps it as a local change rather than taking the new image's `uninitialized`.
 
 ## Refreshing m1n1 + firmware on update (`fenoa-apply-m1n1.service`)
 

@@ -1,8 +1,9 @@
 #!/bin/bash
 # Real `bootc install to-disk` of an image onto a loopback file, then inspect the result by mounting
-# it: systemd-boot on the ESP (no GRUB), a kernel staged under EFI/Linux, and the composefs-native
-# deployment root (/composefs, /ostree, /state). This is the shipping install path, minus the Asahi
-# preboot layer (deploy/tests/esp-bootc-integration.sh covers that).
+# it: systemd-boot on the ESP (no GRUB), a kernel staged under EFI/Linux, the composefs-native
+# deployment root (/composefs, /ostree, /state), and a deployment /etc whose machine-id still reads
+# "uninitialized", so the installed system detects its first boot. This is the shipping install
+# path, minus the Asahi preboot layer (deploy/tests/esp-bootc-integration.sh covers that).
 #
 # Needs root, loop devices and rootful podman with the image in /var/lib/containers:
 #   sudo ./images/fenoa/hack/install-to-disk.sh [IMAGE] [WORKDIR]
@@ -41,7 +42,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-sd=0 grub=0 kern=0 cfs=0 ost=0 st=0
+sd=0 grub=0 kern=0 cfs=0 ost=0 st=0 mid=0
 
 mount "${loop}p1" "$mnt/esp"
 echo "--- ESP /EFI ---"
@@ -59,6 +60,20 @@ ls -a "$mnt/root" 2>/dev/null | head
 [[ -d $mnt/root/composefs ]] && cfs=1
 [[ -d $mnt/root/ostree ]] && ost=1
 [[ -d $mnt/root/state ]] && st=1
+# The install copies the image's /etc into state/deploy/<id>/etc. Its machine-id must still read
+# "uninitialized" (or be absent), or systemd would not see the first boot and systemd-firstboot
+# would never ask its questions.
+for etc in "$mnt/root"/state/deploy/*/etc; do
+  [[ -d $etc ]] || continue
+  if [[ ! -e $etc/machine-id ]]; then
+    echo "installed /etc/machine-id: absent"
+    mid=1
+  else
+    content=$(<"$etc/machine-id")
+    echo "installed /etc/machine-id: '$content'"
+    [[ $content == "uninitialized" ]] && mid=1
+  fi
+done
 umount "$mnt/root"
 
 fail=0
@@ -71,6 +86,8 @@ check "$kern" "kernel staged on ESP" "no kernel on ESP"
 check "$cfs" "/composefs deployment store present" "no /composefs (composefs deploy incomplete)"
 check "$ost" "/ostree present" "no /ostree"
 check "$st" "/state present" "no /state"
+check "$mid" "installed /etc/machine-id is uninitialized: the first boot will be detected" \
+  "installed /etc/machine-id is not uninitialized (or no deployment /etc): systemd-firstboot would not run"
 
 if (( fail == 0 )); then echo "INSTALL-TO-DISK: PASS"; else echo "INSTALL-TO-DISK: FAIL"; fi
 exit "$fail"

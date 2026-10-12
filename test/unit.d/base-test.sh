@@ -8,6 +8,9 @@
 #   require_command CMD  fails unless CMD is on PATH
 #   containerfile_units VERB < TEXT
 #                        the units a Containerfile (stage) passes to `systemctl VERB`, one per line
+#   check_machine_id_last STAGE_NAME STAGE_TEXT
+#                        fails unless the stage writes /etc/machine-id as "uninitialized" after its
+#                        last package install
 #   check_preset PRESET STAGE_TEXT [INSTALLED_NAME]
 #                        fails unless PRESET covers every unit STAGE_TEXT enables, disables or makes
 #                        the default target, and is shaped and named so systemd reads it first
@@ -75,4 +78,18 @@ check_preset() {
     [[ -z $unit ]] || grep -qx "disable $unit" "$preset" ||
       fail "$name disables $unit, which the Containerfile disables"
   done < <(printf '%s\n' "$text" | containerfile_units disable)
+}
+
+# systemd detects a first boot (and runs systemd-firstboot and the preset pass) only when
+# /etc/machine-id is absent or reads "uninitialized"; an empty file does not count. Anything a
+# package install runs could write a real ID, so the write has to come after the stage's last
+# package install.
+check_machine_id_last() {
+  local stage="$1" text="$2" write install
+
+  write=$(printf '%s\n' "$text" | grep -nF -- "printf 'uninitialized\\n' >/etc/machine-id" | tail -1 | cut -d: -f1)
+  install=$(printf '%s\n' "$text" | grep -nE 'dnf -y install' | tail -1 | cut -d: -f1)
+  [[ -n $write ]] || fail "the $stage stage ships /etc/machine-id as uninitialized"
+  (( write > ${install:-0} )) ||
+    fail "the $stage stage writes /etc/machine-id after its last package install" "write at $write, dnf install at $install"
 }

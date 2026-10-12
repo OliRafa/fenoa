@@ -106,6 +106,8 @@ check_preset "$D/usr/lib/systemd/system-preset/50-fenoa-desktop.preset" "$deskto
 grep -qx 'enable greetd.service' "$D/usr/lib/systemd/system-preset/50-fenoa-desktop.preset" ||
   fail "50-fenoa-desktop.preset enables greetd"
 pass "50-fenoa-desktop.preset covers greetd and graphical.target, read before Fedora's presets"
+check_machine_id_last desktop "$desktop_stage"
+pass "the desktop stage ships /etc/machine-id as uninitialized again, after its package installs"
 
 # --- portals ---------------------------------------------------------------------------------------
 

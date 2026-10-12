@@ -28,10 +28,10 @@ CI: `.github/workflows/image-e2e.yml` on `ubuntu-24.04-arm`, building with rootf
 
 | Script | Against | Checks |
 |---|---|---|
-| `images/fenoa/hack/platform-smoke.sh` | platform stage, `fenoa`, `fenoa-fairydust` (`KERNEL=fairydust`) | Asahi base, one kernel, systemd-boot, masked grub units, initramfs (composefs pivot, Apple HID), m1n1 wiring, first-boot/Flatpak/brew units, services, sshd off (also after a preset pass) and closed in firewalld, tuning files, a full `systemctl preset-all` (what a first boot runs) changes nothing, no Omarchy |
+| `images/fenoa/hack/platform-smoke.sh` | platform stage, `fenoa`, `fenoa-fairydust` (`KERNEL=fairydust`) | Asahi base, one kernel, systemd-boot, masked grub units, initramfs (composefs pivot, Apple HID), m1n1 wiring, first-boot/Flatpak/brew units, `/etc/machine-id` reads `uninitialized`, services, sshd off (also after a preset pass) and closed in firewalld, tuning files, a full `systemctl preset-all` (what a first boot runs) changes nothing, no Omarchy |
 | `images/fenoa/hack/desktop-smoke.sh` | `fenoa`, `fenoa-fairydust` | packages, greetd as display manager, greeter account/PAM/state dir, the greeter wrapper exports a keyboard layout, the Secret portal routed to gnome-keyring, the greeter finds its default session, polkit rule ↔ packaged action, `noctalia config validate` and `Hyprland --verify-config` on the seeded config, default apps, greetd and `graphical.target` survive a full `systemctl preset-all` |
 | `images/fenoa/hack/first-boot.sh` | platform stage; `fenoa` with `DESKTOP=1` | preseeded user creation under a populated machine-id and a DynamicUser account, marker, scrubbing, idempotence, skel seeding, `systemd-analyze verify` |
-| `images/fenoa/hack/install-to-disk.sh` | `fenoa` | real `bootc install to-disk --composefs-backend --bootloader systemd`, inspected by loop mount |
+| `images/fenoa/hack/install-to-disk.sh` | `fenoa` | real `bootc install to-disk --composefs-backend --bootloader systemd`, inspected by loop mount; the installed `/etc/machine-id` still reads `uninitialized`, so the first boot will be detected |
 | `deploy/tests/esp-bootc-integration.sh` | `fenoa` | real `bootc install to-filesystem` over a fake Asahi ESP; the preboot layer survives |
 | `images/fairydust/hack/smoke.sh` | `fenoa-fairydust` | kernel swap, DP alt-mode and GPU drivers, PE vmlinuz, DTBs under `dtb/apple/`, rebuilt initramfs |
 
@@ -47,6 +47,6 @@ podman build -t fenoa:44-boottest --build-arg BASE=fenoa:44 -f images/boottest/C
 journalctl -u fenoa-boottest
 ```
 
-`boot-smoke.sh` checks the running kernel and GPU render node, systemd-boot on the located ESP with no GRUB, the m1n1 stamp, services (greetd, NetworkManager, speakersafetyd…), zram, failed units, the greeter process and state directory, SELinux denials for greetd/noctalia-greeter, `hid_apple fnmode`, the trackpad, and first-boot provisioning.
+`boot-smoke.sh` checks the running kernel and GPU render node, systemd-boot on the located ESP with no GRUB, the m1n1 stamp, services (greetd, NetworkManager, speakersafetyd…), zram, failed units, the greeter process and state directory, SELinux denials for greetd/noctalia-greeter, `hid_apple fnmode`, the trackpad, and first-boot provisioning (including a machine ID committed in place of `uninitialized`).
 
-Hardware-only by nature: the tty1 first-boot prompt, the greeter handoff into Hyprland, the m1n1 two-reboot flow, DP alt-mode, and anything SELinux only denies at runtime.
+Hardware-only by nature: the tty1 first-boot prompts (systemd-firstboot's locale, keymap and timezone, then fenoa-firstboot-user's account), the greeter handoff into Hyprland, the m1n1 two-reboot flow, DP alt-mode, and anything SELinux only denies at runtime.

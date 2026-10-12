@@ -150,8 +150,11 @@ RUN set -eux; \
 #     `to-existing-root` convert does NOT import the underlying OS's user, so the greeter would have
 #     no account to offer. fenoa-firstboot-user creates the primary user once (preseed via
 #     /etc/fenoa/firstboot-user.conf, else an interactive tty1 prompt), ordered before the display
-#     manager. systemd-firstboot handles root password / locale / timezone / hostname; it is a
-#     static unit (sysinit.target wants it) that runs on a first boot, so there is nothing to enable.
+#     manager. Before it, systemd-firstboot asks on tty1 for the locale, the keymap and the
+#     timezone. That one is a static unit (sysinit.target wants it) that runs only on a first boot,
+#     which the "uninitialized" /etc/machine-id written in P10 makes systemd detect, so there is
+#     nothing to enable. It asks for no root password: the image's /etc/shadow already has a root
+#     entry ("*", locked), which it treats as configured; the user created next is in wheel.
 RUN set -eux; \
     systemctl enable fenoa-firstboot-user.service
 
@@ -210,11 +213,26 @@ RUN set -eux; \
       echo "[P9] ssh is still allowed in the $zone zone"; exit 1; \
     fi
 
-# P10) Clear build residue so the stage is bootc-clean (no content in /run, /tmp, /var/log or dnf
+# P10) Ship /etc/machine-id as "uninitialized", then clear build residue and lint.
+#
+#      machine-id(5): systemd treats a boot as the first one when /etc/machine-id is absent or reads
+#      "uninitialized"; the base image's EMPTY file does not count, and then systemd-firstboot (P7)
+#      never runs. bootc copies the image's /etc into a new install as is, so with this file the
+#      first boot of every install is detected: systemd-firstboot asks its questions, a full preset
+#      pass runs (50-fenoa.preset keeps every unit as built), and systemd then writes the real ID
+#      to /etc/machine-id. An upgrade keeps that ID: it differs from what the old image shipped, so
+#      bootc's /etc three-way merge treats it as a local change. Written in this last step so that
+#      nothing an earlier step ran (a package scriptlet, say) can leave a real ID baked into the
+#      image; systemd-machine-id-setup itself leaves "uninitialized" alone. D6 repeats it after the
+#      desktop packages.
+#
+#      Build residue: the stage must be bootc-clean (no content in /run, /tmp, /var/log or dnf
 #      caches — these trip the nonempty-run-tmp / var-log / var-tmpfiles lints). Target specific
 #      residue dirs, not /run/* wholesale: the build engine bind-mounts
 #      /run/systemd/resolve/stub-resolv.conf for build DNS, which cannot be removed.
-RUN rm -rf /var/cache/dnf /var/cache/libdnf5 /var/lib/dnf/repos /var/lib/dnf/history* \
+RUN printf 'uninitialized\n' >/etc/machine-id \
+ && [ "$(cat /etc/machine-id)" = uninitialized ] \
+ && rm -rf /var/cache/dnf /var/cache/libdnf5 /var/lib/dnf/repos /var/lib/dnf/history* \
  && rm -f /var/log/dnf5.log* /var/log/dnf.log* /var/log/hawkey.log* \
  && rm -rf /run/dnf /tmp/* \
  && bootc container lint
@@ -297,8 +315,11 @@ RUN set -eux; \
     firewall-offline-cmd --zone="$zone" --add-service=localsend; \
     firewall-offline-cmd --zone="$zone" --query-service=localsend
 
-# D6) Clear build residue and lint.
-RUN rm -rf /var/cache/dnf /var/cache/libdnf5 /var/lib/dnf/repos /var/lib/dnf/history* \
+# D6) Ship /etc/machine-id as "uninitialized" again (see P10), in case anything D3 installed wrote an
+#     ID; clear build residue and lint.
+RUN printf 'uninitialized\n' >/etc/machine-id \
+ && [ "$(cat /etc/machine-id)" = uninitialized ] \
+ && rm -rf /var/cache/dnf /var/cache/libdnf5 /var/lib/dnf/repos /var/lib/dnf/history* \
  && rm -f /var/log/dnf5.log* /var/log/dnf.log* /var/log/hawkey.log* \
  && rm -rf /run/dnf /tmp/* \
  && bootc container lint

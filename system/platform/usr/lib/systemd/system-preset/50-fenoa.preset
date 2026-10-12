@@ -2,11 +2,12 @@
 # as one list sorted by file name, and the first line that matches a unit wins, so this file (50-)
 # overrides Fedora's 85-, 90- and 99- files.
 #
-# A first boot (an absent or "uninitialized" /etc/machine-id) makes systemd run a FULL preset pass:
-# Fedora's systemd sets every unit to what the presets say, and 99-default-disable.preset says
-# `disable *` for anything not listed. So every unit images/fenoa/Containerfile enables or disables
-# has a line here, or the first boot would switch it back; platform-smoke.sh asserts that a full
-# `systemctl preset-all` changes nothing. Masks are left alone by presets.
+# Fenoa ships /etc/machine-id as "uninitialized", so the first boot of every install makes systemd
+# run a FULL preset pass: Fedora's systemd sets every unit to what the presets say, and
+# 99-default-disable.preset says `disable *` for anything not listed. So every unit
+# images/fenoa/Containerfile enables or disables has a line here, or the first boot would switch it
+# back; platform-smoke.sh asserts that a full `systemctl preset-all` changes nothing. Masks are
+# left alone by presets.
 
 # SSH is opt-in (P9): Fedora's 90-default.preset enables sshd. To turn it on yourself:
 # `sudo systemctl enable --now sshd`, then let it through the firewall with

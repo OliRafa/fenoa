@@ -5,10 +5,12 @@
 # machine is unreachable through the GUI — so the gating on that unit is load-bearing, and this
 # file locks it down.
 #
-# The failure it was written for: the unit gated on ConditionFirstBoot=yes, which systemd latches
-# from an empty /etc/machine-id at boot start. Nothing in the image build ships one empty, and a
-# composefs deployment takes /etc from the image, so the condition came out false on real hardware.
-# The unit never ran, getty kept tty1, and the greeter had no user.
+# The failure it was written for: the unit gated on ConditionFirstBoot=yes. systemd counts a boot as
+# the first only when /etc/machine-id is absent or reads "uninitialized", and the image then shipped
+# an empty one, which does not count: on real hardware the unit never ran, getty kept tty1, and the
+# greeter had no user. The image now ships "uninitialized", but the marker gate stays, because
+# systemd commits a real ID during the first boot and only the marker lets an aborted prompt or a
+# failed useradd retry on the next one.
 
 source "$(dirname "$0")/base-test.sh"
 

@@ -3,20 +3,22 @@ Description=Fenoa first-boot primary user provisioning
 Documentation=man:bootc(8)
 # Gate on OUR marker, not systemd's ConditionFirstBoot.
 #
-# ConditionFirstBoot=yes silently skips on real hardware: systemd latches "first boot" from an
-# empty /etc/machine-id at boot start, nothing in the image build guarantees one is shipped empty,
-# and a composefs deployment takes /etc from the image with whatever machine-id it carries. The
-# condition comes out false, the unit never runs, getty keeps tty1, and the greeter comes up with
-# no account to offer — a dead end with no way in.
+# ConditionFirstBoot holds only on the boot that finds /etc/machine-id absent or "uninitialized"; an
+# empty file is not a first boot, which is why a ConditionFirstBoot gate once silently skipped on
+# hardware, leaving getty on tty1 and a greeter with no account to offer — a dead end with no way
+# in. The image now ships "uninitialized", so the first boot is detected, but systemd commits a
+# real machine ID during that boot: after an aborted prompt or a failed useradd the next boot is no
+# longer a first boot, and a ConditionFirstBoot gate would never retry.
 #
-# bootc gives each deployment a fresh /var, so a marker there still means "this deployment has not
+# A new install starts with the image's empty /var, so a marker there means "this install has not
 # been provisioned yet", and the helper writes it only once a human user actually exists — an
 # aborted prompt or a failed useradd therefore retries on the next boot rather than latching off.
 ConditionPathExists=!/var/lib/fenoa/firstboot-user.done
-# systemd-firstboot handles locale / keymap / timezone / root password first; then, if
-# /etc/vconsole.conf carries a console KEYMAP with no XKB settings, we add the XKB layout known for
-# it (so the greeter and the session use it too) and add the human user. Must finish BEFORE the
-# greeter (greetd aliases display-manager.service) so it has an account to offer.
+# systemd-firstboot asks for the locale, keymap and timezone first (no root password: the image's
+# root entry counts as configured); then, if /etc/vconsole.conf carries a console KEYMAP with no
+# XKB settings, we add the XKB layout known for it (so the greeter and the session use it too) and
+# add the human user. Must finish BEFORE the greeter (greetd aliases display-manager.service) so it
+# has an account to offer.
 After=systemd-firstboot.service systemd-user-sessions.service
 Wants=systemd-firstboot.service
 Before=display-manager.service

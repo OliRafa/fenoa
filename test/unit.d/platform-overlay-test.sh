@@ -66,6 +66,9 @@ grep -qx 'disable sshd.service' "$overlay/usr/lib/systemd/system-preset/50-fenoa
   fail "50-fenoa.preset disables sshd.service"
 pass "50-fenoa.preset disables sshd"
 
+check_machine_id_last platform "$platform_stage"
+pass "the platform stage ships /etc/machine-id as uninitialized, after its package installs (first boot is detected)"
+
 boottest="$ROOT/images/boottest/Containerfile"
 installed=$(sed -n 's|^COPY images/boottest/fenoa-boottest.preset /usr/lib/systemd/system-preset/\(.*\)$|\1|p' "$boottest")
 [[ -n $installed ]] || fail "the boottest image installs its preset"

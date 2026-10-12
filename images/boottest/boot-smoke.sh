@@ -85,6 +85,18 @@ initrd_hid="$(journalctl -b -k --no-pager -q 2>/dev/null | grep -m1 -i 'hid-appl
 [[ -n $initrd_hid ]] && note "hid_apple: $initrd_hid"
 
 echo "== first-boot provisioning =="
+# The image ships /etc/machine-id as "uninitialized". On the first boot PID 1 bind-mounts a
+# temporary ID over it, so reading the file shows an ID either way; it is committed only once that
+# mount is gone and systemd-machine-id-commit did not fail. If it never commits, every boot is a
+# first boot, and its full preset pass undoes local unit changes (a `systemctl enable --now sshd`).
+machine_id="$(cat /etc/machine-id 2>/dev/null || true)"
+id_overmount="$(findmnt -n /etc/machine-id 2>/dev/null || true)"
+id_commit="$(systemctl is-failed systemd-machine-id-commit.service 2>/dev/null || true)"
+if [[ $machine_id =~ ^[0-9a-f]{32}$ && -z $id_overmount && $id_commit != "failed" ]]; then
+  ok "machine ID committed after the first boot"
+else
+  no "machine ID not committed (id '${machine_id:-empty}', overmount '${id_overmount:-none}', commit unit '${id_commit:-?}')"
+fi
 [[ -f /var/lib/fenoa/firstboot-user.done ]] && ok "primary user provisioned" || no "fenoa-firstboot-user has not completed"
 systemctl is-active --quiet fenoa-flatpak-preinstall.service && ok "Flatpak app set installed" \
   || note "fenoa-flatpak-preinstall still running or retrying (needs network)"

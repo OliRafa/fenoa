@@ -28,7 +28,7 @@ The split follows one rule: the **platform** stage holds everything a non-graphi
 | P7 | enable `fenoa-firstboot-user` (`systemd-firstboot` is static and needs no enabling) | the image ships no user |
 | P8 | ublue brew tree + Brewfile; baked Flathub remote; enable provisioning units | `/var` is seeded only on first boot |
 | P9 | enable system services; mask NetworkManager-wait-online; disable sshd and drop `ssh` from the default firewalld zone | SSH is opt-in; `50-fenoa.preset` keeps a preset pass from re-enabling sshd |
-| P10 | clean residue; `bootc container lint` | |
+| P10 | `/etc/machine-id` = `uninitialized`; clean residue; `bootc container lint` | systemd detects each install's first boot (an empty file does not count), so systemd-firstboot runs |
 
 ### desktop (steps D1–D6)
 
@@ -39,7 +39,7 @@ The split follows one rule: the **platform** stage holds everything a non-graphi
 | D3 | `packages/desktop.packages` |
 | D4 | `COPY system/desktop/ /`; assert the greeter account, binaries and session name; install the SELinux file context for the greeter's state directory |
 | D5 | enable greetd (it aliases `display-manager.service`); default to `graphical.target` |
-| D6 | clean residue; `bootc container lint` |
+| D6 | `/etc/machine-id` = `uninitialized` again, in case anything D3 installed wrote an ID; clean residue; `bootc container lint` |
 
 ### fairydust (`images/fairydust/Containerfile`, F1–F3)
 
@@ -57,7 +57,7 @@ Copies the fairydust kernel tree in, removes every other kernel, runs `depmod`, 
 | `/var/lib/noctalia-greeter` | runtime (tmpfiles) | greeter state; `greeter.toml` is a link back into `/usr/share/fenoa/greeter` |
 | `/var/lib/flatpak`, `/home/linuxbrew` | runtime | Flatpak apps and the Homebrew prefix, provisioned on first boot and updated on their own timers |
 
-Every unit a Containerfile enables or disables (or makes the default target) also has a line in that stage's preset file, `/usr/lib/systemd/system-preset/50-fenoa.preset` or `50-fenoa-desktop.preset`. A first boot makes systemd run a full preset pass, which sets every unit to what the presets say and, through Fedora's `99-default-disable.preset`, disables anything they do not list; without those lines it would switch off greetd and the first-boot units. The smoke tests run `systemctl preset-all` in the image and require that nothing changes.
+Every unit a Containerfile enables or disables (or makes the default target) also has a line in that stage's preset file, `/usr/lib/systemd/system-preset/50-fenoa.preset` or `50-fenoa-desktop.preset`. The image ships `/etc/machine-id` as `uninitialized`, so every install has a first boot, and a first boot makes systemd run a full preset pass, which sets every unit to what the presets say and, through Fedora's `99-default-disable.preset`, disables anything they do not list; without those lines it would switch off greetd and the first-boot units. The smoke tests run `systemctl preset-all` in the image and require that nothing changes.
 
 `/var` is created from the image only on the first boot of a deployment and never updated by `bootc upgrade`, so nothing in the image may rely on content baked into `/var`; directories come from `tmpfiles.d`, state from first-boot units.
 
@@ -82,7 +82,8 @@ Each `hyprctl reload` runs the config in a fresh Lua state, so `require` loads t
 
 ```
 m1n1 → U-Boot → systemd-boot → kernel + initramfs (bootc composefs pivot, hid_apple loaded)
-  → systemd-firstboot, fenoa-firstboot-user (first boot only, tty1)
+  → first boot only (/etc/machine-id ships "uninitialized"): full preset pass, then on tty1
+      systemd-firstboot (locale, keymap, timezone) and fenoa-firstboot-user (the account)
   → greetd → fenoa-greeter-session (XKB_DEFAULT_* from fenoa/keyboard.lua) → noctalia-greeter-session
       (bundled wlroots compositor) → PAM (/etc/pam.d/greetd, keyring unlock)
   → uwsm start hyprland.desktop → Hyprland → uwsm-app noctalia
