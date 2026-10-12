@@ -42,11 +42,21 @@ awk '/^\[/{sec=$0} /^StartLimitIntervalSec=0/{print sec}' "$unit" | grep -q '^\[
     "$(grep -n 'StartLimitIntervalSec' "$unit")"
 pass "the retry limiter is disabled in [Unit]"
 
-grep -qE '^ExecStartPre=/usr/bin/flatpak remote-add .*--system .*/etc/flatpak/remotes.d/flathub\.flatpakrepo' "$unit" ||
-  fail "the remote is added from the baked local file, without a session bus" "$(grep -n Exec "$unit")"
-grep -qE '^ExecStartPre=.*remote-add .*http' "$unit" &&
-  fail "the remote must not be fetched over the network at boot" "$(grep -n Exec "$unit")"
-pass "the remote is registered from the baked local file before preinstall runs"
+grep -qE '^ExecStartPre=/usr/bin/flatpak remote-add .*--system .*flathub /etc/flatpak/remotes.d/flathub\.flatpakrepo$' "$unit" ||
+  fail "Flathub is added from the baked local file, without a session bus" "$(grep -n Exec "$unit")"
+grep -qE '^ExecStartPre=.*remote-add .*flathub https?:' "$unit" &&
+  fail "Flathub must not be fetched over the network at boot" "$(grep -n Exec "$unit")"
+pass "Flathub is registered from the baked local file before preinstall runs"
+
+# Fedora's registry supplies what Flathub lacks on aarch64 (OBS). preinstall takes each app from the
+# first remote by priority and breaks ties alphabetically, so Flathub must outrank "fedora".
+grep -qE '^ExecStartPre=/usr/bin/flatpak remote-add --system --if-not-exists .*fedora oci\+https://registry\.fedoraproject\.org$' "$unit" ||
+  fail "Fedora's Flatpak registry is added as the fedora remote" "$(grep -n Exec "$unit")"
+flathub_prio=$(sed -n 's/^ExecStartPre=.*remote-modify --system --prio=\([0-9]*\) flathub$/\1/p' "$unit")
+fedora_prio=$(sed -n 's/^ExecStartPre=.*remote-modify --system --prio=\([0-9]*\) fedora$/\1/p' "$unit")
+[[ -n $flathub_prio && -n $fedora_prio ]] || fail "both remote priorities are set" "$(grep -n prio "$unit")"
+(( flathub_prio > fedora_prio )) || fail "Flathub outranks Fedora ($flathub_prio vs $fedora_prio)"
+pass "Fedora's registry is a lower-priority second remote (Flathub $flathub_prio > Fedora $fedora_prio)"
 
 grep -qE '^ExecStart=/usr/bin/dbus-run-session -- /usr/bin/flatpak preinstall .*-y' "$unit" ||
   fail "preinstall runs under dbus-run-session (needs a D-Bus session bus)" "$(grep -n Exec "$unit")"

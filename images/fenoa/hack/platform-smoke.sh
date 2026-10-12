@@ -112,6 +112,7 @@ done
   && ok "fenoa-flatpak-update.timer enabled" || no "fenoa-flatpak-update.timer not enabled"
 unit="$(cat /usr/lib/systemd/system/fenoa-flatpak-preinstall.service 2>/dev/null || true)"
 case $unit in *Restart=on-failure*) ok "preinstall retries on failure" ;; *) no "preinstall unit has no Restart=on-failure" ;; esac
+case $unit in *"--prio=10 flathub"*"--prio=1 fedora"*) ok "Flathub outranks Fedora's registry (OBS-only fallback)" ;; *) no "remote priorities not set (Fedora would win ties)" ;; esac
 case $unit in *"dbus-run-session -- /usr/bin/flatpak preinstall"*) ok "preinstall runs under dbus-run-session" ;; *) no "preinstall not wrapped in dbus-run-session (dies without a session bus)" ;; esac
 # ...and dbus-run-session must exist: base-atomic has none, and without it the units fail with
 # 203/EXEC and retry forever. (The desktop once got it only by accident, via system-config-printer.)

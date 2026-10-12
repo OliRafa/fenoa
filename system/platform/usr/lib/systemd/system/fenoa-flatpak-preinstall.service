@@ -1,5 +1,5 @@
 [Unit]
-Description=Preinstall the Fenoa Flatpak app set (Flathub)
+Description=Preinstall the Fenoa Flatpak app set (Flathub, plus Fedora for what Flathub lacks)
 Documentation=man:flatpak-preinstall(1)
 # Runs Fedora/flatpak's upstream `flatpak preinstall`, which reads /usr/share/flatpak/preinstall.d
 # and installs the vendor app set — the install logic, idempotency and user opt-out are all upstream.
@@ -22,16 +22,26 @@ StartLimitIntervalSec=0
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-# DIVERGENCE 1: add the Flathub remote at first boot from the baked local file (baked by
-# images/fenoa/Containerfile), rather than bluefin's build-time `flatpak remote-add`. A build-time system remote writes to
-# /var/lib/flatpak, and our composefs-native image ships a FRESH /var seeded only on first boot, so a
-# build-time remote would not survive to here. Reading a file baked into /etc does, and needs no DNS.
+# DIVERGENCE 1: add the remotes at first boot rather than bluefin's build-time `flatpak remote-add`.
+# A build-time system remote writes to /var/lib/flatpak, and our composefs-native image ships a FRESH
+# /var seeded only on first boot, so it would not survive to here. Flathub comes from the local file
+# baked by images/fenoa/Containerfile and needs no DNS; adding Fedora's OCI remote fetches nothing
+# either.
+#
+# Two remotes, Flathub first. `flatpak preinstall` installs each app from the first remote, in
+# priority order, that has it for this architecture, and breaks ties alphabetically — so with equal
+# priorities "fedora" would beat "flathub" for every app both carry (LibreOffice, Loupe, Evince...).
+# Flathub gets priority 10 and Fedora 1, so Fedora only supplies what Flathub lacks on aarch64: OBS
+# Studio. remote-modify re-asserts the priorities on machines whose remotes already existed.
 ExecStartPre=/usr/bin/flatpak remote-add --system --if-not-exists flathub /etc/flatpak/remotes.d/flathub.flatpakrepo
+ExecStartPre=/usr/bin/flatpak remote-add --system --if-not-exists --title="Fedora Flatpaks" fedora oci+https://registry.fedoraproject.org
+ExecStartPre=/usr/bin/flatpak remote-modify --system --prio=10 flathub
+ExecStartPre=/usr/bin/flatpak remote-modify --system --prio=1 fedora
 # Wrap in dbus-run-session: `flatpak preinstall` needs a D-Bus SESSION bus (it activates the OCI
 # authenticator), and a system service has none — without one it dies instantly with "Cannot
 # autolaunch D-Bus without X11 $DISPLAY" and installs nothing. dbus-run-session gives it a throwaway
 # session bus; flatpak still reaches the privileged install helper over the system bus as normal.
-# (remote-add above needs no session bus, so it is left unwrapped.)
+# (remote-add/remote-modify above need no session bus, so they are left unwrapped.)
 # No stamp and run on every boot on purpose: `flatpak preinstall` is a fast no-op once satisfied, it
 # applies later additions to the app set, and it honours apps the user has since removed.
 ExecStart=/usr/bin/dbus-run-session -- /usr/bin/flatpak preinstall -y --noninteractive

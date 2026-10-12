@@ -166,8 +166,10 @@ RUN set -eux; \
 #     /usr/share/flatpak/preinstall.d — the desktop stage ships the app set). The Flathub remote is
 #     baked in as a LOCAL file so `remote-add` at first boot needs no DNS (NetworkManager-wait-online
 #     is masked below, so network-online.target is reached before the network is up); the build
-#     fails rather than ship an image whose remote step is back on the network. Masking
-#     flatpak-add-fedora-repos.service keeps Flathub the only enabled remote.
+#     fails rather than ship an image whose remote step is back on the network.
+#     flatpak-add-fedora-repos.service is masked: it would add Fedora's remotes (including
+#     fedora-testing) at Flathub's priority, and Fedora wins priority ties. The preinstall unit adds
+#     Fedora's stable remote itself, below Flathub, for the one app Flathub lacks on aarch64 (OBS).
 COPY --from=brew /system_files/ /
 COPY Brewfile /usr/share/fenoa/Brewfile
 RUN set -eux; \

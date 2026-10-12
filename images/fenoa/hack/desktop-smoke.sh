@@ -26,7 +26,7 @@ if rpm -q hyprland >/dev/null 2>&1 || rpm -q hyprland-git >/dev/null 2>&1; then 
 [[ -f /usr/share/wayland-sessions/hyprland-uwsm.desktop ]] && ok "hyprland-uwsm.desktop session" || no "uwsm session file missing"
 for p in uwsm noctalia noctalia-greeter greetd greetd-selinux accountsservice gnome-keyring xdg-desktop-portal-hyprland \
          xdg-desktop-portal-gtk adw-gtk3-theme foot xdg-terminal-exec nautilus mpv mpv-mpris wl-clipboard \
-         obs-studio udiskie adobe-source-code-pro-fonts cascadia-mono-nf-fonts; do
+         udiskie adobe-source-code-pro-fonts cascadia-mono-nf-fonts; do
   rpm -q "$p" >/dev/null 2>&1 && ok "$p" || no "$p missing"
 done
 for p in sddm quickshell firefox; do
@@ -109,7 +109,7 @@ sh -n /usr/share/uwsm/env.d/10-fenoa 2>/dev/null && ok "uwsm env.d/10-fenoa pars
 mime="$(cat /usr/share/applications/hyprland-mimeapps.list 2>/dev/null || true)"
 case $mime in *"x-scheme-handler/https=com.brave.Browser.desktop"*) ok "https opens Brave" ;; *) no "https is not mapped to Brave" ;; esac
 manifest="$(cat /usr/share/flatpak/preinstall.d/fenoa.preinstall 2>/dev/null || true)"
-for app in com.brave.Browser org.gnome.Loupe org.gnome.Evince org.libreoffice.LibreOffice md.obsidian.Obsidian org.localsend.localsend_app; do
+for app in com.brave.Browser org.gnome.Loupe org.gnome.Evince org.libreoffice.LibreOffice md.obsidian.Obsidian org.localsend.localsend_app com.obsproject.Studio; do
   case $manifest in *"[Flatpak Preinstall $app]"*) ok "Flatpak preinstall: $app" ;; *) no "Flatpak preinstall lacks $app" ;; esac
 done
 mono="$(fc-match -f '%{family}' monospace 2>/dev/null || true)"

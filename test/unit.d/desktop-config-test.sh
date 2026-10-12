@@ -156,14 +156,11 @@ branches=$(grep -cE '^Branch=stable$' "$manifest")
 (( groups > 0 && groups == branches )) || fail "every preinstall group pins Branch=stable ($groups groups, $branches stable)"
 pass "every preinstall group pins Branch=stable"
 
-for app in com.brave.Browser org.gnome.Loupe org.gnome.Evince org.libreoffice.LibreOffice md.obsidian.Obsidian org.localsend.localsend_app; do
+for app in com.brave.Browser org.gnome.Loupe org.gnome.Evince org.libreoffice.LibreOffice md.obsidian.Obsidian \
+           org.localsend.localsend_app com.obsproject.Studio; do
   grep -qF "[Flatpak Preinstall $app]" "$manifest" || fail "the Flatpak set includes $app"
 done
-# Flathub builds OBS for x86_64 only; an unresolvable group makes preinstall fail and retry forever.
-if grep -qF '[Flatpak Preinstall com.obsproject.Studio]' "$manifest"; then
-  fail "OBS Studio must not be a Flatpak on aarch64 (Flathub has no aarch64 build); it is the native RPM"
-fi
-pass "the Flatpak set: Brave, Loupe, Evince, LibreOffice, Obsidian, LocalSend (OBS is native)"
+pass "the Flatpak set: Brave, Loupe, Evince, LibreOffice, Obsidian, LocalSend, OBS Studio (Fedora's build)"
 
 while read -r app; do
   case $app in
@@ -180,11 +177,14 @@ pass "the Flatpak default apps in mimeapps are all preinstalled"
 packages="$ROOT/packages/desktop.packages"
 dupes=$(sed 's/#.*//' "$packages" | awk 'NF{print $1}' | sort | uniq -d)
 [[ -z $dupes ]] || fail "desktop.packages has no duplicates" "$dupes"
-for p in noctalia noctalia-greeter greetd uwsm adw-gtk3-theme foot obs-studio udiskie adobe-source-code-pro-fonts cascadia-mono-nf-fonts; do
+for p in noctalia noctalia-greeter greetd uwsm adw-gtk3-theme foot udiskie adobe-source-code-pro-fonts cascadia-mono-nf-fonts; do
   sed 's/#.*//' "$packages" | awk 'NF{print $1}' | grep -qx "$p" || fail "desktop.packages installs $p"
 done
 if sed 's/#.*//' "$packages" | awk 'NF{print $1}' | grep -qxE 'sddm|quickshell'; then
   fail "desktop.packages carries no SDDM or Quickshell"
+fi
+if sed 's/#.*//' "$packages" | awk 'NF{print $1}' | grep -qx 'obs-studio'; then
+  fail "OBS Studio is Fedora's Flatpak, not the native RPM"
 fi
 pass "desktop.packages installs the shell, greeter and session, and nothing from Omarchy's stack"
 

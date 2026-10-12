@@ -40,7 +40,7 @@ brew "lazygit"             # terminal UI for git
 
 # --- General CLI utilities ---
 brew "tmux"
-brew "htop"
+brew "btop"                # process / resource monitor
 brew "yt-dlp"
 brew "tealdeer"            # tldr client
 brew "dua-cli"

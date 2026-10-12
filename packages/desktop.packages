@@ -54,4 +54,3 @@ glycin-loaders
 nm-connection-editor        # VPN and advanced connection settings
 system-config-printer
 udiskie                     # automount removable drives (started from fenoa/autostart.lua)
-obs-studio                  # native: Flathub's OBS Studio is x86_64-only
