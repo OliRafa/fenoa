@@ -4,6 +4,9 @@
 # Check a change with: noctalia config validate
 
 [shell]
+# The shell's text uses the system monospace font (Source Code Pro, set in
+# /etc/fonts/conf.d/50-fenoa-monospace.conf); the greeter follows via sync.
+font_family = "monospace"
 # Fenoa ships no other polkit agent: Noctalia answers authentication prompts (printer admin,
 # NetworkManager, the greeter appearance sync, ...).
 polkit_agent = true

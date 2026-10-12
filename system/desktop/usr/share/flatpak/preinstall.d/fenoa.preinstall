@@ -22,3 +22,23 @@ IsRuntime=false
 [Flatpak Preinstall org.gnome.Evince]
 Branch=stable
 IsRuntime=false
+
+# Office suite.
+[Flatpak Preinstall org.libreoffice.LibreOffice]
+Branch=stable
+IsRuntime=false
+
+# Notes.
+[Flatpak Preinstall md.obsidian.Obsidian]
+Branch=stable
+IsRuntime=false
+
+# Send files to nearby devices. Needs TCP+UDP 53317, which the image opens in firewalld
+# (/usr/lib/firewalld/services/localsend.xml).
+[Flatpak Preinstall org.localsend.localsend_app]
+Branch=stable
+IsRuntime=false
+
+# OBS Studio is NOT here: Flathub builds com.obsproject.Studio for x86_64 only, and an unresolvable
+# group makes `flatpak preinstall` fail and retry forever. It is the native obs-studio RPM instead
+# (packages/desktop.packages).

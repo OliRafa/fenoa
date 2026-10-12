@@ -15,10 +15,15 @@ Fenoa's session is Hyprland (Lua config) managed by uwsm, with Noctalia v5 as th
 | Night light | Noctalia | wlr-gamma-control; no hyprsunset |
 | Theming | Noctalia templates | `gtk3`, `gtk4` (adw-gtk3), `foot`, `hyprland` |
 | Login screen | noctalia-greeter (Terra) on greetd | its own wlroots compositor; state in `/var/lib/noctalia-greeter` |
-| Terminal | foot | via `xdg-terminal-exec` (`/etc/xdg/hyprland-xdg-terminals.list`) |
+| Terminal | foot | via `xdg-terminal-exec` (`/etc/xdg/hyprland-xdg-terminals.list`); `~/.config/foot/foot.ini` sets `monospace:size=11` |
 | Files | Nautilus | |
+| Removable drives | udiskie | automounts USB drives and SD cards from session start |
 | Browser, images, PDF | Brave, Loupe, Evince (Flatpaks) | defaults in `/usr/share/applications/hyprland-mimeapps.list` |
+| Office, notes, file sharing | LibreOffice, Obsidian, LocalSend (Flatpaks) | LocalSend's port 53317 (TCP+UDP) is open in firewalld |
+| Screen recording / streaming | OBS Studio (native RPM) | Flathub's OBS has no aarch64 build |
 | Media | mpv + mpv-mpris | Noctalia's media controls see it over MPRIS |
+| Font | Source Code Pro | the system `monospace` (`/etc/fonts/conf.d/50-fenoa-monospace.conf`), used by foot, Noctalia and the greeter; Cascadia Mono NF supplies Nerd Font icons as a fallback |
+| Shell tools | starship, zoxide, fzf, eza, bat, ripgrep, fd, lazygit (Homebrew) | wired into interactive bash by `/etc/profile.d/fenoa-shell.sh` once installed: starship prompt, `cd` falls back to zoxide, fzf on Ctrl+R/Ctrl+T/Alt+C, `ls`/`lt` via eza, `ff` fuzzy file preview; opt out with `FENOA_SHELL_SETUP=0` |
 
 ## Key bindings
 

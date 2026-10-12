@@ -15,7 +15,7 @@ Both are rebuilt weekly and on every change, smoke-tested, and cosign-signed.
 
 - **Desktop:** Hyprland (Lua config) with Noctalia for the bar, launcher, control center, notifications, OSD, lock screen, idle handling, polkit prompts, clipboard history, screenshots, night light and wallpaper. Noctalia's palette (a built-in scheme, or one generated from your wallpaper) also colours GTK apps, foot and Hyprland's borders.
 - **Login:** noctalia-greeter on greetd, styled like the shell (Noctalia syncs your wallpaper and palette to it). Your login password unlocks the GNOME keyring.
-- **Apps:** foot, Nautilus, mpv, Docker and Homebrew in the image; Brave, Loupe and Evince as Flatpaks installed on first boot; developer CLIs (Neovim, tmux, gh, language toolchains) from the [Brewfile](Brewfile).
+- **Apps:** foot, Nautilus, mpv, OBS Studio, udiskie (USB automount), Docker and Homebrew in the image; Brave, Loupe, Evince, LibreOffice, Obsidian and LocalSend as Flatpaks installed on first boot; shell and developer tools (starship, zoxide, fzf, eza, bat, ripgrep, fd, lazygit, Neovim, tmux, gh, language toolchains) from the [Brewfile](Brewfile). Source Code Pro is the default monospace font.
 - **Apple Silicon:** systemd-boot on composefs, m1n1/devicetree refresh after updates, the trackpad boot-race fix and macOS-style function keys in the initramfs, keyboard backlight on Shift+brightness, the Apple lid switch, Widevine DRM for Brave on aarch64. See [docs/asahi.md](docs/asahi.md).
 
 ## Install

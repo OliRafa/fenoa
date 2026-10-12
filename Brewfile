@@ -28,6 +28,16 @@ brew "mariadb-connector-c"
 # --- Dev CLIs ---
 brew "gh"
 
+# --- Shell tools (wired into interactive bash by /etc/profile.d/fenoa-shell.sh) ---
+brew "starship"            # prompt
+brew "zoxide"              # `z dir` jumps to frecent directories; `cd` falls back to it
+brew "fzf"                 # fuzzy finder: Ctrl+R history, Ctrl+T files, Alt+C directories
+brew "eza"                 # ls with git status and icons (`ls`, `lt` aliases)
+brew "bat"                 # cat with syntax highlighting and paging
+brew "ripgrep"             # rg: fast recursive grep
+brew "fd"                  # fd: fast, friendly find
+brew "lazygit"             # terminal UI for git
+
 # --- General CLI utilities ---
 brew "tmux"
 brew "htop"

@@ -156,6 +156,15 @@ branches=$(grep -cE '^Branch=stable$' "$manifest")
 (( groups > 0 && groups == branches )) || fail "every preinstall group pins Branch=stable ($groups groups, $branches stable)"
 pass "every preinstall group pins Branch=stable"
 
+for app in com.brave.Browser org.gnome.Loupe org.gnome.Evince org.libreoffice.LibreOffice md.obsidian.Obsidian org.localsend.localsend_app; do
+  grep -qF "[Flatpak Preinstall $app]" "$manifest" || fail "the Flatpak set includes $app"
+done
+# Flathub builds OBS for x86_64 only; an unresolvable group makes preinstall fail and retry forever.
+if grep -qF '[Flatpak Preinstall com.obsproject.Studio]' "$manifest"; then
+  fail "OBS Studio must not be a Flatpak on aarch64 (Flathub has no aarch64 build); it is the native RPM"
+fi
+pass "the Flatpak set: Brave, Loupe, Evince, LibreOffice, Obsidian, LocalSend (OBS is native)"
+
 while read -r app; do
   case $app in
     com.brave.Browser|org.gnome.Loupe|org.gnome.Evince)
@@ -171,7 +180,7 @@ pass "the Flatpak default apps in mimeapps are all preinstalled"
 packages="$ROOT/packages/desktop.packages"
 dupes=$(sed 's/#.*//' "$packages" | awk 'NF{print $1}' | sort | uniq -d)
 [[ -z $dupes ]] || fail "desktop.packages has no duplicates" "$dupes"
-for p in noctalia noctalia-greeter greetd uwsm adw-gtk3-theme foot; do
+for p in noctalia noctalia-greeter greetd uwsm adw-gtk3-theme foot obs-studio udiskie adobe-source-code-pro-fonts cascadia-mono-nf-fonts; do
   sed 's/#.*//' "$packages" | awk 'NF{print $1}' | grep -qx "$p" || fail "desktop.packages installs $p"
 done
 if sed 's/#.*//' "$packages" | awk 'NF{print $1}' | grep -qxE 'sddm|quickshell'; then
@@ -183,6 +192,25 @@ pass "desktop.packages installs the shell, greeter and session, and nothing from
 grep -qF "excludepkgs=gtk4* gtk3* pango* cairo* noctalia* quickshell*" "$containerfile" ||
   fail "the Hyprland COPR is excluded from GTK, Noctalia, the greeter and Quickshell"
 pass "the Hyprland COPR cannot replace GTK, Noctalia, the greeter or Quickshell"
+
+# LocalSend can only discover and receive with its port open in the default zone.
+svc="$D/usr/lib/firewalld/services/localsend.xml"
+grep -qF '<port protocol="tcp" port="53317"/>' "$svc" && grep -qF '<port protocol="udp" port="53317"/>' "$svc" ||
+  fail "the localsend firewalld service opens TCP and UDP 53317"
+grep -qF -- '--add-service=localsend' "$containerfile" || fail "the Containerfile enables the localsend service"
+pass "LocalSend's port 53317 (TCP+UDP) is opened in the default firewalld zone"
+
+grep -qF 'udiskie --automount' "$hypr/fenoa/autostart.lua" || fail "udiskie is started with the session"
+pass "udiskie automounts removable drives from session start"
+
+# The default font: Source Code Pro as "monospace", used by foot, the shell and (via sync) the greeter.
+grep -qF '<string>Source Code Pro</string>' "$D/etc/fonts/conf.d/50-fenoa-monospace.conf" ||
+  fail "fontconfig makes Source Code Pro the monospace font"
+grep -qF 'mode="prepend_first" binding="strong"' "$D/etc/fonts/conf.d/50-fenoa-monospace.conf" ||
+  fail "the monospace preference wins over other packages' preferences"
+[[ "$(toml "$noctalia_defaults" 't["shell"]["font_family"]')" == "monospace" ]] || fail "the Noctalia shell uses the monospace font"
+grep -qx 'font=monospace:size=11' "$D/etc/skel/.config/foot/foot.ini" || fail "foot uses monospace at size 11"
+pass "Source Code Pro is the default monospace for foot, the shell and the greeter"
 
 # uwsm sources env.d with sh.
 sh -n "$D/usr/share/uwsm/env.d/10-fenoa" || fail "uwsm env.d/10-fenoa is valid sh"
