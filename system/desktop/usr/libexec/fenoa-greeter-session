@@ -1,0 +1,45 @@
+#!/bin/bash
+# greetd's greeter command (/etc/greetd/config.toml): noctalia-greeter-session, started with the
+# keyboard layout the Hyprland session will use.
+#
+# Left alone, the greeter takes XKB* from /etc/vconsole.conf as written. The session does not:
+# fenoa/keyboard.lua puts a Latin layout first (Hyprland's letter bindings need it), drops X-only
+# terminate:* options and adds a group toggle. With a non-Latin keymap such as ru the greeter would
+# start in Cyrillic, while the first-boot password was typed with the console in its Latin mode and
+# the session starts in us. So run the session's own resolver and hand its answer to the greeter as
+# XKB_DEFAULT_*: with a non-empty XKB_DEFAULT_LAYOUT the greeter takes its keymap from those
+# variables and does not read vconsole.conf at all, so all three come from this one resolver run.
+# greetd starts the greeter with a minimal environment, so nothing else sets them.
+#
+# Never blocks login: if the resolver cannot run, the greeter starts without the variables and
+# reads vconsole.conf itself.
+set -uo pipefail
+
+lua="${FENOA_LUA:-/usr/bin/lua}"
+greeter="${FENOA_GREETER_SESSION:-/usr/bin/noctalia-greeter-session}"
+
+# The resolver's path reaches Lua through the environment, never spliced into the code.
+resolved=$(FENOA_KEYBOARD_LUA="${FENOA_KEYBOARD_LUA:-/usr/share/fenoa/hypr/fenoa/keyboard.lua}" \
+  timeout 5 "$lua" - <<'LUA'
+local keyboard = dofile(os.getenv("FENOA_KEYBOARD_LUA")).resolve()
+io.write("layout=", keyboard.layout, "\nvariant=", keyboard.variant, "\noptions=", keyboard.options, "\n")
+LUA
+)
+status=$?
+
+layout="" variant="" options=""
+while IFS='=' read -r key value; do
+  case $key in
+    layout) layout=$value ;;
+    variant) variant=$value ;;
+    options) options=$value ;;
+  esac
+done <<<"$resolved"
+
+if (( status == 0 )) && [[ -n $layout ]]; then
+  export XKB_DEFAULT_LAYOUT="$layout" XKB_DEFAULT_VARIANT="$variant" XKB_DEFAULT_OPTIONS="$options"
+else
+  echo "fenoa-greeter-session: could not resolve the keyboard layout (status $status); the greeter reads /etc/vconsole.conf instead" >&2
+fi
+
+exec "$greeter" "$@"

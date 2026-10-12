@@ -81,7 +81,8 @@ Each `hyprctl reload` runs the config in a fresh Lua state, so `require` loads t
 ```
 m1n1 → U-Boot → systemd-boot → kernel + initramfs (bootc composefs pivot, hid_apple loaded)
   → systemd-firstboot, fenoa-firstboot-user (first boot only, tty1)
-  → greetd → noctalia-greeter-session (bundled wlroots compositor) → PAM (/etc/pam.d/greetd, keyring unlock)
+  → greetd → fenoa-greeter-session (XKB_DEFAULT_* from fenoa/keyboard.lua) → noctalia-greeter-session
+      (bundled wlroots compositor) → PAM (/etc/pam.d/greetd, keyring unlock)
   → uwsm start hyprland.desktop → Hyprland → uwsm-app noctalia
 background: fenoa-apply-m1n1, fenoa-flatpak-preinstall, brew-setup → fenoa-brew-setup
 ```

@@ -21,6 +21,7 @@ wl-clipboard
 noctalia                    # Fedora: bar, launcher, notifications, OSD, lock, idle, polkit agent
 noctalia-greeter            # Terra (restricted to this one package)
 greetd                      # pulls greetd-selinux
+lua                         # runs the keyboard resolver for the greeter (Hyprland only pulls lua-libs)
 accountsservice             # avatars in the greeter
 gnome-keyring               # unlocked at login by /etc/pam.d/greetd
 libsecret

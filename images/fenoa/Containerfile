@@ -270,9 +270,10 @@ RUN retry() { n=1; while ! "$@"; do [ "$n" -ge 5 ] && return 1; echo "[dnf-retry
 #     Copied after the packages so /etc/greetd/config.toml replaces the package's agreety default.
 COPY system/desktop/ /
 RUN set -eux; \
-    chmod 0755 /usr/bin/fenoa-kbd-backlight /usr/bin/fenoa-hypr-clamshell; \
+    chmod 0755 /usr/bin/fenoa-kbd-backlight /usr/bin/fenoa-hypr-clamshell /usr/libexec/fenoa-greeter-session; \
     getent passwd greetd >/dev/null || { echo "[D4] greetd's greeter account is missing"; exit 1; }; \
     [ -x /usr/bin/noctalia-greeter-session ] || { echo "[D4] noctalia-greeter-session missing"; exit 1; }; \
+    [ -x /usr/bin/lua ] || { echo "[D4] lua missing: fenoa-greeter-session cannot give the greeter the session's layout"; exit 1; }; \
     [ -x /usr/bin/noctalia-greeter-apply-appearance ] || { echo "[D4] greeter sync helper missing"; exit 1; }; \
     grep -qx 'Name=Hyprland (uwsm-managed)' /usr/share/wayland-sessions/hyprland-uwsm.desktop \
       || { echo "[D4] the greeter's default session name no longer matches hyprland-uwsm.desktop"; exit 1; }; \

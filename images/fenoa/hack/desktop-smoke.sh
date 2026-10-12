@@ -42,10 +42,18 @@ dm="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || tru
 [[ $dm == */greetd.service ]] && ok "greetd is the display manager" || no "display-manager is not greetd (${dm:-unset})"
 [[ "$(systemctl get-default 2>/dev/null)" == "graphical.target" ]] && ok "default target = graphical.target" || no "default target is not graphical.target"
 greetd_conf="$(cat /etc/greetd/config.toml 2>/dev/null || true)"
-case $greetd_conf in *'command = "/usr/bin/noctalia-greeter-session"'*) ok "greetd runs noctalia-greeter-session" ;; *) no "greetd does not run noctalia-greeter-session" ;; esac
+case $greetd_conf in *'command = "/usr/libexec/fenoa-greeter-session"'*) ok "greetd runs fenoa-greeter-session" ;; *) no "greetd does not run fenoa-greeter-session" ;; esac
 case $greetd_conf in *'user = "greetd"'*) ok "greetd runs the greeter as greetd" ;; *) no "greetd greeter user is not greetd" ;; esac
 getent passwd greetd >/dev/null && ok "greetd account exists" || no "greetd account missing"
 [[ -x /usr/bin/noctalia-greeter-session ]] && ok "noctalia-greeter-session executable" || no "noctalia-greeter-session missing"
+[[ -x /usr/libexec/fenoa-greeter-session ]] && ok "fenoa-greeter-session executable" || no "fenoa-greeter-session missing or not executable"
+[[ -x /usr/bin/lua ]] && ok "lua (runs the keyboard resolver for the greeter)" || no "/usr/bin/lua missing"
+# The wrapper must hand the greeter a layout from the session's resolver; /usr/bin/env stands in for
+# the greeter and prints what it would get.
+greeter_env="$(FENOA_GREETER_SESSION=/usr/bin/env /usr/libexec/fenoa-greeter-session 2>&1 || true)"
+greeter_layout="$(printf '%s\n' "$greeter_env" | sed -n 's/^XKB_DEFAULT_LAYOUT=//p')"
+[[ -n $greeter_layout ]] && ok "the greeter gets the session's layout (XKB_DEFAULT_LAYOUT=$greeter_layout)" \
+  || no "fenoa-greeter-session sets no XKB_DEFAULT_LAYOUT: ${greeter_env%%$'\n'*}"
 pam="$(cat /etc/pam.d/greetd 2>/dev/null || true)"
 case $pam in *pam_gnome_keyring.so*auto_start*) ok "login unlocks the GNOME keyring (pam_gnome_keyring)" ;; *) no "/etc/pam.d/greetd does not unlock the keyring" ;; esac
 

@@ -55,9 +55,20 @@ pass "Noctalia defaults: polkit agent, uwsm-launched apps, greeter auto sync"
 
 greeter_user=$(toml "$greetd" 't["default_session"]["user"]')
 [[ $greeter_user == "greetd" ]] || fail "greetd runs the greeter as Fedora's greetd account" "got: $greeter_user"
-[[ "$(toml "$greetd" 't["default_session"]["command"]')" == "/usr/bin/noctalia-greeter-session" ]] ||
-  fail "greetd launches noctalia-greeter-session (not the bare greeter binary)"
-pass "greetd launches noctalia-greeter-session as greetd"
+[[ "$(toml "$greetd" 't["default_session"]["command"]')" == "/usr/libexec/fenoa-greeter-session" ]] ||
+  fail "greetd launches the greeter through fenoa-greeter-session (the session's keyboard layout)"
+wrapper="$D/usr/libexec/fenoa-greeter-session"
+[[ -x $wrapper ]] || fail "fenoa-greeter-session ships and is executable"
+grep -qF 'greeter="${FENOA_GREETER_SESSION:-/usr/bin/noctalia-greeter-session}"' "$wrapper" ||
+  fail "fenoa-greeter-session execs noctalia-greeter-session (not the bare greeter binary)"
+grep -qF 'lua="${FENOA_LUA:-/usr/bin/lua}"' "$wrapper" || fail "fenoa-greeter-session runs /usr/bin/lua"
+resolver=$(sed -n 's/.*FENOA_KEYBOARD_LUA="\${FENOA_KEYBOARD_LUA:-\([^}]*\)}".*/\1/p' "$wrapper")
+[[ $resolver == /usr/share/fenoa/hypr/fenoa/keyboard.lua && -f $D$resolver ]] ||
+  fail "fenoa-greeter-session runs the resolver Hyprland uses" "got: ${resolver:-<unparsed>}"
+grep -qF 'require("fenoa.keyboard")' "$hypr/fenoa/input.lua" || fail "Hyprland takes its layout from the same resolver"
+grep -qE 'chmod 0755 .*/usr/libexec/fenoa-greeter-session' "$containerfile" ||
+  fail "the Containerfile makes fenoa-greeter-session executable"
+pass "greetd starts the greeter as greetd through fenoa-greeter-session, which shares Hyprland's layout resolver"
 
 grep -qE "^d /var/lib/noctalia-greeter 0750 $greeter_user $greeter_user -$" "$tmpfiles" ||
   fail "the greeter state dir is 0750 and owned by the account greetd uses (else a blank greeter)" "$(cat "$tmpfiles")"
@@ -200,7 +211,7 @@ pass "the Flatpak default apps in mimeapps are all preinstalled"
 packages="$ROOT/packages/desktop.packages"
 dupes=$(sed 's/#.*//' "$packages" | awk 'NF{print $1}' | sort | uniq -d)
 [[ -z $dupes ]] || fail "desktop.packages has no duplicates" "$dupes"
-for p in noctalia noctalia-greeter greetd uwsm adw-gtk3-theme foot udiskie wf-recorder adobe-source-code-pro-fonts cascadia-mono-nf-fonts; do
+for p in noctalia noctalia-greeter greetd lua uwsm adw-gtk3-theme foot udiskie wf-recorder adobe-source-code-pro-fonts cascadia-mono-nf-fonts; do
   sed 's/#.*//' "$packages" | awk 'NF{print $1}' | grep -qx "$p" || fail "desktop.packages installs $p"
 done
 if sed 's/#.*//' "$packages" | awk 'NF{print $1}' | grep -qxE 'sddm|quickshell'; then

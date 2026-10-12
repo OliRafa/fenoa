@@ -40,7 +40,7 @@ sudo reboot
 
 ### First boot
 
-1. `systemd-firstboot` asks for locale, keymap, timezone and the root password (set a hostname later with `hostnamectl hostname <name>`). Hyprland follows the keymap you pick.
+1. `systemd-firstboot` asks for locale, keymap, timezone and the root password (set a hostname later with `hostnamectl hostname <name>`). The login screen and Hyprland follow the keymap you pick.
 2. `fenoa-firstboot-user` asks for your username, full name and password on tty1 (or reads a preseed from `/etc/fenoa/firstboot-user.conf`).
 3. The greeter comes up; log in to the **Hyprland (uwsm-managed)** session. Noctalia's setup wizard takes it from there.
 4. In the background the Flatpak apps and the Brewfile install once the network is up. A reboot or two later, `fenoa-apply-m1n1` has refreshed m1n1 and the devicetree for the installed kernel.

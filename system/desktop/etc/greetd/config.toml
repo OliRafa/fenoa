@@ -1,12 +1,14 @@
-# greetd runs noctalia-greeter on VT1. The greeter starts its own bundled wlroots compositor
-# (noctalia-greeter-session), lists the sessions in /usr/share/wayland-sessions, and authenticates
-# through /etc/pam.d/greetd — which unlocks the GNOME keyring with the login password.
+# greetd runs noctalia-greeter on VT1. /usr/libexec/fenoa-greeter-session hands it the session's
+# keyboard layout (the resolver Hyprland uses, as XKB_DEFAULT_*) and execs noctalia-greeter-session,
+# which starts the greeter's own bundled wlroots compositor. The greeter lists the sessions in
+# /usr/share/wayland-sessions and authenticates through /etc/pam.d/greetd — which unlocks the GNOME
+# keyring with the login password.
 
 [terminal]
 vt = 1
 
 [default_session]
-command = "/usr/bin/noctalia-greeter-session"
+command = "/usr/libexec/fenoa-greeter-session"
 # Fedora's greetd package creates the greeter account as "greetd" (upstream docs say "greeter").
 # /usr/lib/tmpfiles.d/fenoa-greeter.conf gives this account the greeter's state directory.
 user = "greetd"
