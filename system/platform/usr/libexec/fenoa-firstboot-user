@@ -16,15 +16,21 @@
 #
 # Idempotent + first-boot-gated: exits 0 if any human account (login.defs UID range) already exists,
 # so it's a no-op on a system that already has a user (e.g. an ostree-backend convert that kept one).
+#
+# Before creating the user: if /etc/vconsole.conf carries a console KEYMAP with no XKB settings,
+# one systemd-firstboot did not convert, it adds the XKB layout known for that keymap, so the login
+# screen and the desktop use the layout the password is typed in.
 set -uo pipefail
 
 log() { printf 'firstboot-user: %s\n' "$1"; }
 
-# Both paths are overridable so the logic is testable without a container
+# The paths are overridable so the logic is testable without a container
 # (test/unit.d/firstboot-user-test.sh); the defaults are what the unit uses.
 conf="${FENOA_FIRSTBOOT_CONF:-/etc/fenoa/firstboot-user.conf}"
 marker="${FENOA_FIRSTBOOT_MARKER:-/var/lib/fenoa/firstboot-user.done}"
 login_defs="${FENOA_LOGIN_DEFS:-/etc/login.defs}"
+vconsole="${FENOA_VCONSOLE_CONF:-/etc/vconsole.conf}"
+kbd_model_map="${FENOA_KBD_MODEL_MAP:-/usr/share/systemd/kbd-model-map}"
 
 # The unit is gated on this marker (ConditionPathExists=!...), NOT on systemd's ConditionFirstBoot —
 # see fenoa-firstboot-user.service for why that gate silently skipped. Write it only once a human
@@ -53,6 +59,67 @@ if getent passwd | awk -F: -v lo="$uid_min" -v hi="$uid_max" '$3>=lo && $3<=hi {
   exit 0
 fi
 
+# --- console keymap → XKB layout ----------------------------------------------------------------
+#
+# systemd-firstboot asks for a console keymap and, when it can convert it, also writes the matching
+# XKBLAYOUT & co. to /etc/vconsole.conf. Some keymaps it does not convert (ua, bg-cp1251, kyrgyz and
+# de_CH-latin1 on Fedora 44), and then the file carries a console KEYMAP with no XKB settings. The
+# login screen and Hyprland (fenoa/keyboard.lua) map such a KEYMAP through kbd-model-map; for one
+# that table lacks too, they fall back to us while the password below is typed in the console
+# keymap. Fill in the keymaps an XKB equivalent is known for, and warn about the rest.
+#
+# Non-Latin layouts keep us to switch to, as systemd's own conversions do, so a password typed in
+# the console's Latin mode stays typeable.
+keymap_xkb_settings() {
+  local layout variant="" options=terminate:ctrl_alt_bksp
+  local switch=terminate:ctrl_alt_bksp,grp:shifts_toggle,grp_led:scroll
+
+  case $1 in
+    bg-cp1251) layout=bg,us variant=phonetic, options=$switch ;;
+    de_CH-latin1) layout=ch ;;
+    kyrgyz) layout=kg,us options=$switch ;;
+    ua) layout=ua,us options=$switch ;;
+    *) return 1 ;;
+  esac
+
+  printf 'XKBLAYOUT=%s\nXKBMODEL=pc105\n' "$layout"
+  [[ -z $variant ]] || printf 'XKBVARIANT=%s\n' "$variant"
+  printf 'XKBOPTIONS=%s\n' "$options"
+}
+
+# Why the session will fall back to us, if it will; the interactive prompt warns about it. Never
+# fatal: a layout problem must not stop the account from being created.
+us_fallback_note=""
+if [[ -f $vconsole ]]; then
+  keymap="" xkb_layout=""
+  # `|| [[ -n $key ]]` keeps a last line that has no newline.
+  while IFS='=' read -r key value || [[ -n $key ]]; do
+    value=${value%\"} value=${value#\"} value=${value%\'} value=${value#\'}
+    case $key in
+      KEYMAP) keymap=$value ;;
+      XKBLAYOUT) xkb_layout=$value ;;
+    esac
+  done <"$vconsole"
+
+  # A KEYMAP that kbd-model-map converts is already handled by fenoa/keyboard.lua: leave it.
+  if [[ -n $keymap && -z $xkb_layout ]] &&
+    ! awk -v k="$keymap" '!/^[[:space:]]*#/ && $1 == k { found = 1 } END { exit !found }' "$kbd_model_map" 2>/dev/null; then
+    if xkb=$(keymap_xkb_settings "$keymap"); then
+      # A file without a final newline would glue the first new line onto its last one.
+      [[ -z $(tail -c1 "$vconsole") ]] || echo >>"$vconsole"
+      if printf '%s\n' "$xkb" >>"$vconsole"; then
+        log "console keymap '$keymap' came without XKB settings — added ${xkb//$'\n'/ }"
+      else
+        log "could not save the XKB layout for console keymap '$keymap' to $vconsole — the login screen and desktop will use us" >&2
+        us_fallback_note="the XKB layout for the console keymap '$keymap' could not be saved"
+      fi
+    else
+      log "console keymap '$keymap' has no XKB equivalent — the login screen and desktop will use us"
+      us_fallback_note="the console keymap '$keymap' has no XKB equivalent"
+    fi
+  fi
+fi
+
 USERNAME="" FULLNAME="" PASSWORD="" PASSWORD_HASH="" GROUPS_EXTRA="wheel"
 
 if [[ -r $conf ]]; then
@@ -72,6 +139,14 @@ else
   while [[ -z $USERNAME ]]; do read -rp "Username: " USERNAME; done
   read -rp "Full name [$USERNAME]: " FULLNAME
   FULLNAME="${FULLNAME:-$USERNAME}"
+  if [[ -n $us_fallback_note ]]; then
+    echo
+    echo "  Note: $us_fallback_note,"
+    echo "  so the login screen and the desktop will use the US layout. Choose a password you can type"
+    echo "  on a US layout, or set your layout later from a text console with:"
+    echo "  sudo localectl set-x11-keymap <layout>"
+    echo
+  fi
   while :; do
     read -rsp "Password: " p1
     echo

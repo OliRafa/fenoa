@@ -9,7 +9,7 @@ Runs anywhere (CI: `.github/workflows/tests.yml` on ubuntu, plus shellcheck at e
 - `bash -n` on every shell script (`test/shell-files` lists them: `*.sh` plus anything with a `#!/bin/bash` shebang)
 - `test/unit` — every `test/unit.d/*-test.sh`, hermetic, stubbing commands through `PATH`:
   - `apply-m1n1-test.sh` — the zero-mtime gzip workaround in `fenoa-apply-m1n1`, and that it only runs on a boot that came through m1n1
-  - `firstboot-user-test.sh` — unit gating, the DynamicUser UID trap, marker/preseed handling
+  - `firstboot-user-test.sh` — unit gating, the DynamicUser UID trap, marker/preseed handling, the XKB layout filled in for a KEYMAP-only `vconsole.conf` that systemd-firstboot did not convert and `kbd-model-map` cannot map (and the US-layout warning otherwise)
   - `brew-setup-test.sh` — primary-user detection, empty-prefix debris, no network
   - `flatpak-provisioning-test.sh` — preinstall/update units and their build wiring
   - `widevine-test.sh` — CDM wiring into Flatpak profiles, the canonical-path hint, Brave's opt-in

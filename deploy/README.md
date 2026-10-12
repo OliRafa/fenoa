@@ -263,6 +263,7 @@ So the image creates the primary user **once, on first boot**, before the displa
     FENOA_USER_PASSWORD_HASH='$6$...'  # preferred (crypt(3) hash from `openssl passwd -6`)
     # FENOA_USER_PASSWORD=plaintext    # alternative to the hash
     ```
+  - Before either: if `/etc/vconsole.conf` carries a console `KEYMAP` with no XKB settings (systemd-firstboot does not convert every keymap) that the desktop's fallback table cannot map either, it adds the XKB layout known for `ua`, `bg-cp1251`, `kyrgyz` and `de_CH-latin1`, so the greeter and the desktop use it too; for any other keymap the interactive prompt warns that they will use the US layout.
 
 The unit is gated on a marker in `/var/lib/fenoa` (not `ConditionFirstBoot`, which silently skips
 when the image carries a populated `/etc/machine-id`) and self-skips if any human account in the

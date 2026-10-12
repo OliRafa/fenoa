@@ -96,6 +96,15 @@ chmod +x "$mock_bin"/*
 conf="$test_tmp/firstboot-user.conf"
 marker="$test_tmp/state/firstboot-user.done"
 mock_log="$test_tmp/mock.log"
+vconsole="$test_tmp/vconsole.conf"   # absent unless a test writes it; never the host's
+# A slice of systemd's kbd-model-map: de and ru convert, ua and the other test keymaps do not.
+kbd_model_map="$test_tmp/kbd-model-map"
+cat >"$kbd_model_map" <<'MAP'
+# consolelayout		xlayout	xmodel		xvariant	xoptions
+us			us	pc105+inet	-		terminate:ctrl_alt_bksp
+de			de	pc105		-		terminate:ctrl_alt_bksp
+ru			ru,us	pc105		-		terminate:ctrl_alt_bksp,grp:shifts_toggle,grp_led:scroll
+MAP
 
 write_preseed() {
   cat >"$conf" <<'PRESEED'
@@ -109,6 +118,7 @@ PRESEED
 run_helper() {
   env PATH="$mock_bin:$PATH" MOCK_LOG="$mock_log" \
     FENOA_FIRSTBOOT_CONF="$conf" FENOA_FIRSTBOOT_MARKER="$marker" \
+    FENOA_VCONSOLE_CONF="$vconsole" FENOA_KBD_MODEL_MAP="$kbd_model_map" \
     "$@" bash "$helper" >"$test_tmp/out.log" 2>&1
 }
 
@@ -156,3 +166,98 @@ fi
 pass "a failed useradd fails the unit"
 [[ ! -e $marker ]] || fail "a failed run leaves no done marker (so the next boot retries)"
 pass "a failed run leaves no done marker"
+
+# 5) Console keymap → XKB layout. For a keymap systemd-firstboot does not convert, vconsole.conf
+#    carries a console KEYMAP with no XKB settings; unless kbd-model-map maps it (fenoa/keyboard.lua
+#    falls back to that table), the login screen and Hyprland use us while the password is typed in
+#    the console keymap. The helper fills in the keymaps it knows, warns about the rest, and never
+#    lets this stand in the way of creating the account.
+run_keymap() { # run_keymap <vconsole.conf contents, with \n escapes>
+  : >"$mock_log"; rm -f "$marker"; write_preseed
+  printf '%b' "$1" >"$vconsole"
+  run_helper || fail "a run with a console keymap succeeds" "$(cat "$test_tmp/out.log")"
+  grep -q '^useradd .*tester' "$mock_log" || fail "the account is still created" "$(cat "$test_tmp/out.log")"
+}
+
+run_keymap 'KEYMAP=ua\n'
+[[ "$(cat "$vconsole")" == $'KEYMAP=ua\nXKBLAYOUT=ua,us\nXKBMODEL=pc105\nXKBOPTIONS=terminate:ctrl_alt_bksp,grp:shifts_toggle,grp_led:scroll' ]] ||
+  fail "an unconverted ua keymap gets ua,us appended" "$(cat "$vconsole")"
+pass "an unconverted keymap (ua) gets its XKB layout, model and options appended"
+
+run_keymap 'KEYMAP=bg-cp1251\n'
+[[ "$(cat "$vconsole")" == $'KEYMAP=bg-cp1251\nXKBLAYOUT=bg,us\nXKBMODEL=pc105\nXKBVARIANT=phonetic,\nXKBOPTIONS=terminate:ctrl_alt_bksp,grp:shifts_toggle,grp_led:scroll' ]] ||
+  fail "bg-cp1251 gets the phonetic variant too" "$(cat "$vconsole")"
+pass "a variant is written only when the keymap has one (bg-cp1251 → phonetic)"
+
+run_keymap 'KEYMAP="de_CH-latin1"'
+[[ "$(cat "$vconsole")" == $'KEYMAP="de_CH-latin1"\nXKBLAYOUT=ch\nXKBMODEL=pc105\nXKBOPTIONS=terminate:ctrl_alt_bksp' ]] ||
+  fail "a quoted keymap on a last line without a newline is read and appended to cleanly" "$(cat "$vconsole")"
+pass "a quoted keymap on an unterminated last line is handled"
+
+run_keymap 'KEYMAP=ru\nXKBLAYOUT=ru,us\nXKBMODEL=pc105\nXKBOPTIONS=terminate:ctrl_alt_bksp,grp:shifts_toggle,grp_led:scroll\n'
+printf 'KEYMAP=ru\nXKBLAYOUT=ru,us\nXKBMODEL=pc105\nXKBOPTIONS=terminate:ctrl_alt_bksp,grp:shifts_toggle,grp_led:scroll\n' >"$test_tmp/expected"
+cmp -s "$vconsole" "$test_tmp/expected" || fail "a keymap systemd already converted is left byte-identical" "$(cat "$vconsole")"
+pass "a keymap that already has an XKB layout is left byte-identical"
+
+run_keymap 'KEYMAP=de\n'
+printf 'KEYMAP=de\n' >"$test_tmp/expected"
+cmp -s "$vconsole" "$test_tmp/expected" || fail "a KEYMAP kbd-model-map converts is left alone" "$(cat "$vconsole")"
+if grep -qF 'XKB' "$test_tmp/out.log"; then
+  fail "a KEYMAP kbd-model-map converts draws no warning (keyboard.lua maps it)" "$(cat "$test_tmp/out.log")"
+fi
+pass "a KEYMAP-only file that kbd-model-map converts (de) is left alone, with no warning"
+
+run_keymap 'KEYMAP=xx-unknown\n'
+printf 'KEYMAP=xx-unknown\n' >"$test_tmp/expected"
+cmp -s "$vconsole" "$test_tmp/expected" || fail "an unknown keymap is left alone" "$(cat "$vconsole")"
+grep -qF "console keymap 'xx-unknown' has no XKB equivalent" "$test_tmp/out.log" ||
+  fail "an unknown keymap is logged" "$(cat "$test_tmp/out.log")"
+pass "an unknown keymap is left alone and logged"
+
+: >"$mock_log"; rm -f "$marker" "$vconsole"; write_preseed
+run_helper || fail "a run without vconsole.conf succeeds" "$(cat "$test_tmp/out.log")"
+[[ ! -e $vconsole ]] || fail "no vconsole.conf is created when there is none"
+pass "without vconsole.conf nothing is created"
+
+: >"$mock_log"; rm -f "$marker"; printf 'KEYMAP=ua\n' >"$vconsole"
+HUMAN_USER=1 run_helper || fail "a run with an existing user succeeds"
+[[ "$(cat "$vconsole")" == "KEYMAP=ua" ]] || fail "with a human user already there, vconsole.conf is not touched" "$(cat "$vconsole")"
+pass "with a human user already there, vconsole.conf is not touched"
+
+# Interactive: the password prompt warns when the session will fall back to us. (read -p prompts
+# are not printed without a terminal, so only the note and the outcome are checked.)
+: >"$mock_log"; rm -f "$marker" "$conf"; printf 'KEYMAP=xx-unknown\n' >"$vconsole"
+run_helper <<<$'tester\n\nhunter22\nhunter22' || fail "an interactive run succeeds" "$(cat "$test_tmp/out.log")"
+grep -q '^useradd .*tester' "$mock_log" || fail "the interactive run creates the account" "$(cat "$mock_log")"
+grep -qF "Note: the console keymap 'xx-unknown' has no XKB equivalent" "$test_tmp/out.log" &&
+  grep -qF 'sudo localectl set-x11-keymap' "$test_tmp/out.log" ||
+  fail "the interactive prompt warns that the session will use the US layout" "$(cat "$test_tmp/out.log")"
+pass "the interactive prompt warns before the password when the session will use the US layout"
+
+: >"$mock_log"; rm -f "$marker" "$conf"; printf 'KEYMAP=ua\n' >"$vconsole"
+run_helper <<<$'tester\n\nhunter22\nhunter22' || fail "an interactive run with a known keymap succeeds"
+if grep -qF 'has no XKB equivalent' "$test_tmp/out.log"; then
+  fail "no warning when the keymap got its XKB layout" "$(cat "$test_tmp/out.log")"
+fi
+pass "no warning when the keymap got its XKB layout"
+
+: >"$mock_log"; rm -f "$marker" "$conf"; printf 'KEYMAP=de\n' >"$vconsole"
+run_helper <<<$'tester\n\nhunter22\nhunter22' || fail "an interactive run with a converted keymap succeeds"
+if grep -qF 'Note:' "$test_tmp/out.log"; then
+  fail "no warning for a keymap kbd-model-map converts" "$(cat "$test_tmp/out.log")"
+fi
+pass "no warning for a keymap kbd-model-map converts (de)"
+
+# A vconsole.conf that cannot be written still never blocks the account, and the note says why the
+# layout falls back to us. (root writes through a read-only mode, so only checked unprivileged.)
+if (( EUID != 0 )); then
+  : >"$mock_log"; rm -f "$marker" "$conf"; printf 'KEYMAP=ua\n' >"$vconsole"; chmod 0444 "$vconsole"
+  run_helper <<<$'tester\n\nhunter22\nhunter22' || fail "an interactive run with a read-only vconsole.conf succeeds"
+  chmod 0644 "$vconsole"
+  grep -q '^useradd .*tester' "$mock_log" || fail "a read-only vconsole.conf does not block the account"
+  grep -qF "Note: the XKB layout for the console keymap 'ua' could not be saved" "$test_tmp/out.log" ||
+    fail "a failed write is reported as such, not as a missing XKB equivalent" "$(cat "$test_tmp/out.log")"
+  pass "a vconsole.conf that cannot be written is reported, and the account is still created"
+else
+  pass "skipped the read-only vconsole.conf case (root ignores the file mode)"
+fi
