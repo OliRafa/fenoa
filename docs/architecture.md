@@ -50,7 +50,7 @@ Copies the fairydust kernel tree in, removes every other kernel, runs `depmod`, 
 | Path | Owner | Notes |
 |---|---|---|
 | `/usr/lib/systemd/**`, `/usr/lib/sysctl.d`, `/usr/lib/udev/rules.d`, `/usr/lib/modprobe.d`, `/usr/lib/dracut/dracut.conf.d`, `/usr/lib/tmpfiles.d`, `/usr/lib/NetworkManager/conf.d`, `/usr/share/polkit-1/rules.d` | image | vendor drop-in paths: updates flow through `bootc upgrade` and an admin can still override in `/etc` |
-| `/etc/sudoers.d`, `/etc/security/faillock.conf`, `/etc/docker/daemon.json`, `/etc/cups/cups-browsed.conf`, `/etc/greetd/config.toml`, `/etc/xdg/*` | image, merged | only where the consumer reads nothing else; `/etc` is three-way merged on upgrade, so a local edit sticks |
+| `/etc/sudoers.d`, `/etc/docker/daemon.json`, `/etc/cups/cups-browsed.conf`, `/etc/greetd/config.toml`, `/etc/xdg/*` | image, merged | only where the consumer reads nothing else; `/etc` is three-way merged on upgrade, so a local edit sticks |
 | `/usr/share/fenoa/hypr`, `/usr/share/fenoa/noctalia`, `/usr/share/fenoa/greeter` | image | desktop defaults, pulled in by the user's config |
 | `/etc/skel/.config/{hypr,noctalia}` | image → user | thin files seeded into a new home that load the `/usr/share/fenoa` defaults |
 | `/var/lib/fenoa` | runtime | first-boot markers and the m1n1 stamp |

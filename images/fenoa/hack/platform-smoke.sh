@@ -147,7 +147,7 @@ for f in /usr/lib/sysctl.d/99-fenoa-sysctl.conf /usr/lib/sysctl.d/90-fenoa-file-
          /usr/lib/systemd/logind.conf.d/10-fenoa-power-button.conf /usr/lib/systemd/logind.conf.d/20-fenoa-inhibit-delay.conf \
          /usr/lib/systemd/oomd.conf.d/10-fenoa.conf /usr/lib/systemd/user/app.slice.d/10-fenoa-oomd.conf \
          /usr/lib/NetworkManager/conf.d/50-fenoa-wifi-powersave.conf /usr/lib/tmpfiles.d/fenoa-zswap.conf \
-         /etc/docker/daemon.json /etc/security/faillock.conf; do
+         /etc/docker/daemon.json; do
   [[ -f $f ]] && ok "$f" || no "$f missing"
 done
 [[ -x /usr/lib/systemd/system-sleep/fenoa-unmount-fuse ]] && ok "gvfs FUSE unmount sleep hook" || no "sleep hook missing or not executable"

@@ -83,8 +83,8 @@ RUN set -eux; \
 
 # P4) The platform overlay: first-boot/m1n1/provisioning units and helpers, system tuning drop-ins,
 #     and the Apple HID modprobe/dracut configuration. Copied AFTER the package install so the
-#     packages' %config files (cups-browsed.conf, faillock.conf) are replaced rather than left as
-#     .rpmnew, and BEFORE P5 so the initramfs picks up the dracut and modprobe drop-ins.
+#     packages' %config files (cups-browsed.conf) are replaced rather than left as .rpmnew, and
+#     BEFORE P5 so the initramfs picks up the dracut and modprobe drop-ins.
 COPY system/platform/ /
 RUN chmod 0755 /usr/libexec/fenoa-* /usr/bin/fenoa-* /usr/lib/systemd/system-sleep/fenoa-* \
  && chmod 0440 /etc/sudoers.d/fenoa-* \

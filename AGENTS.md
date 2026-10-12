@@ -17,7 +17,7 @@ Fenoa (Fedora Noctalia Atomic) is a bootc image for Apple Silicon Macs: Fedora A
 ## Where things go
 
 - Platform vs desktop: anything a non-graphical Fedora Asahi bootc install needs (boot, firmware, drivers, system services, provisioning) belongs to the platform stage; anything that exists for the Hyprland/Noctalia session belongs to the desktop stage.
-- Prefer vendor drop-in paths under `/usr/lib` (`systemd/*.conf.d`, `sysctl.d`, `udev/rules.d`, `modprobe.d`, `tmpfiles.d`, `NetworkManager/conf.d`, `polkit-1` rules under `/usr/share`) so image updates flow through without `/etc` three-way-merge conflicts. Use `/etc` only for files whose consumer reads nothing else (sudoers, faillock, docker, greetd).
+- Prefer vendor drop-in paths under `/usr/lib` (`systemd/*.conf.d`, `sysctl.d`, `udev/rules.d`, `modprobe.d`, `tmpfiles.d`, `NetworkManager/conf.d`, `polkit-1` rules under `/usr/share`) so image updates flow through without `/etc` three-way-merge conflicts. Use `/etc` only for files whose consumer reads nothing else (sudoers, docker, greetd).
 - Anything the initramfs needs (`modprobe.d`, `dracut.conf.d`) must be in the image before the initramfs rebuild step. `images/fairydust/Containerfile` rebuilds it again for its kernel.
 - `/var` is seeded only on first boot and never updated by `bootc upgrade`. Never bake state into `/var`; ship a `tmpfiles.d` entry or a first-boot unit instead.
 - Desktop defaults live in `/usr/share/fenoa/` and are pulled in from the user's config (`~/.config/hypr/hyprland.lua` loads them, `~/.config/noctalia/config.toml` includes them), so updating the image updates the defaults without rewriting user files. `/etc/skel` only seeds those thin user files.
