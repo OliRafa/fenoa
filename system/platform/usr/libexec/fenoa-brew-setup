@@ -18,7 +18,7 @@
 # when the curl fails. An image that already contains Homebrew cannot fail that way.
 set -uo pipefail
 
-# Paths are overridable so this can be exercised off-hardware; see test/brew-setup-test.sh.
+# Paths are overridable so this can be exercised off-hardware; see test/unit.d/brew-setup-test.sh.
 BREWFILE="${FENOA_BREW_FILE:-/usr/share/fenoa/Brewfile}"
 STAMP="${FENOA_BREW_STAMP:-/var/lib/fenoa/brew-setup-done}"
 PREFIX="${FENOA_BREW_PREFIX:-/home/linuxbrew/.linuxbrew}"

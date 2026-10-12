@@ -21,7 +21,7 @@ set -uo pipefail
 log() { printf 'firstboot-user: %s\n' "$1"; }
 
 # Both paths are overridable so the logic is testable without a container
-# (test/firstboot-user-test.sh); the defaults are what the unit uses.
+# (test/unit.d/firstboot-user-test.sh); the defaults are what the unit uses.
 conf="${FENOA_FIRSTBOOT_CONF:-/etc/fenoa/firstboot-user.conf}"
 marker="${FENOA_FIRSTBOOT_MARKER:-/var/lib/fenoa/firstboot-user.done}"
 login_defs="${FENOA_LOGIN_DEFS:-/etc/login.defs}"

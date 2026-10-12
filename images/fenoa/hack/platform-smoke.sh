@@ -113,6 +113,9 @@ done
 unit="$(cat /usr/lib/systemd/system/fenoa-flatpak-preinstall.service 2>/dev/null || true)"
 case $unit in *Restart=on-failure*) ok "preinstall retries on failure" ;; *) no "preinstall unit has no Restart=on-failure" ;; esac
 case $unit in *"dbus-run-session -- /usr/bin/flatpak preinstall"*) ok "preinstall runs under dbus-run-session" ;; *) no "preinstall not wrapped in dbus-run-session (dies without a session bus)" ;; esac
+# ...and dbus-run-session must exist: base-atomic has none, and without it the units fail with
+# 203/EXEC and retry forever. (The desktop once got it only by accident, via system-config-printer.)
+[[ -x /usr/bin/dbus-run-session ]] && ok "dbus-run-session installed" || no "dbus-run-session missing — Flatpak provisioning cannot run"
 
 echo "== Homebrew ships prebuilt (ublue brew image) =="
 [[ -s /usr/share/homebrew.tar.zst ]] && ok "homebrew.tar.zst shipped" || no "homebrew.tar.zst missing"

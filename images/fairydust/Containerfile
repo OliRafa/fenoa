@@ -62,6 +62,7 @@ RUN set -eux; \
     dracut --force --no-hostonly --reproducible --kver "$kver" \
       --add "$modname" "/usr/lib/modules/$kver/initramfs.img"; \
     if [ "$roothome_made" = 1 ]; then rmdir /var/roothome; fi; \
+    { set +x; } 2>/dev/null; \
     contents="$(lsinitrd "/usr/lib/modules/$kver/initramfs.img")"; \
     echo "$contents" | grep -q 'bootc-root-setup\.service' \
       || { echo "[F2] rebuilt initramfs lacks bootc-root-setup.service"; exit 1; }; \

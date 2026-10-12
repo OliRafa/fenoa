@@ -7,7 +7,7 @@ Documentation=man:flatpak-preinstall(1)
 # unit, and two things differ from bluefin because our platform differs (see below).
 ConditionPathExists=/usr/bin/flatpak
 # network-online.target is NOT a real barrier here: the image masks NetworkManager-wait-online
-# (images/base/Containerfile), so it is reached before DHCP/DNS. Keep it as a best-effort
+# (images/fenoa/Containerfile), so it is reached before DHCP/DNS. Keep it as a best-effort
 # hint, but the real robustness is Restart=on-failure below.
 Wants=network-online.target
 After=network-online.target
@@ -23,7 +23,7 @@ StartLimitIntervalSec=0
 Type=oneshot
 RemainAfterExit=yes
 # DIVERGENCE 1: add the Flathub remote at first boot from the baked local file (baked by
-# images/base/Containerfile), rather than bluefin's build-time `flatpak remote-add`. A build-time system remote writes to
+# images/fenoa/Containerfile), rather than bluefin's build-time `flatpak remote-add`. A build-time system remote writes to
 # /var/lib/flatpak, and our composefs-native image ships a FRESH /var seeded only on first boot, so a
 # build-time remote would not survive to here. Reading a file baked into /etc does, and needs no DNS.
 ExecStartPre=/usr/bin/flatpak remote-add --system --if-not-exists flathub /etc/flatpak/remotes.d/flathub.flatpakrepo

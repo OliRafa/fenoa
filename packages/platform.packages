@@ -59,6 +59,8 @@ docker-buildx
 
 # --- Provisioning (first-boot Flatpak preinstall; Homebrew ships prebuilt from ublue's image) ---
 flatpak
+dbus-tools                  # dbus-run-session: the Flatpak units need a session bus (see the units)
+dbus-daemon                 # ...which dbus-run-session starts; base-atomic ships neither
 
 # --- Console and base CLI ---
 plymouth
