@@ -2,17 +2,23 @@
 Description=Update system Flatpaks (apps, runtimes, appstream)
 Documentation=man:flatpak-update(1)
 ConditionPathExists=/usr/bin/flatpak
-# Needs a real network; keep the hint even though wait-online is masked here — the timer re-fires, so
-# a run that lands before the network is up is simply skipped by the check below and retried later.
-Wants=network-online.target
-After=network-online.target
+# No network-online.target: the image masks NetworkManager-wait-online, so it is reached before the
+# network is up and waits for nothing. The fenoa-online condition below is the network check.
 
 [Service]
 Type=oneshot
+# Wait up to 5 minutes for the remotes to answer over HTTPS (fenoa-online), then skip rather than
+# fail. The timer fires once, not on a retry loop, and its catch-up run (Persistent=) usually lands
+# at boot or right at resume, before Wi-Fi has reconnected: an immediate check would skip that run
+# day after day, and a run that went ahead offline would fail. A skipped run waits for the next
+# daily one. A oneshot has no start timeout by default, so nothing cuts the wait short, and each
+# request is bounded (10s per host), so the check ends at most about 20 seconds past its 5 minutes.
+ExecCondition=/usr/libexec/fenoa-online --wait=300 dl.flathub.org registry.fedoraproject.org
 # Skip on a metered connection so a phone hotspot is not silently drained — the same guard ublue and
 # bluefin put on their flatpak update units. NMMetered: 1=yes, 3=guess-yes, 2=no, 4=guess-no, 0=unknown.
 # Proceed unless KNOWN-metered (1/3): if the property can't be read the string is empty and we still
-# update, because a system whose Flatpaks otherwise never update is the worse failure.
+# update, because a system whose Flatpaks otherwise never update is the worse failure. Checked AFTER
+# the wait above, so it sees the connection that came up rather than the "unknown" of none at all.
 ExecCondition=/usr/bin/bash -c 'm=$(busctl get-property org.freedesktop.NetworkManager /org/freedesktop/NetworkManager org.freedesktop.NetworkManager Metered 2>/dev/null | cut -c 3-); [[ $m != 1 && $m != 3 ]]'
 # Wrap in dbus-run-session for the same reason as fenoa-flatpak-preinstall.service: `flatpak`
 # needs a D-Bus session bus, which a system service lacks, and dies with "Cannot autolaunch D-Bus

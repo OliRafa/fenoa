@@ -22,6 +22,17 @@ set -uo pipefail
 fail=0
 ok() { printf '  \033[32m✓\033[0m %s\n' "$1"; }
 no() { printf '  \033[31m✗ %s\033[0m\n' "$1"; fail=1; }
+# timer_only UNIT: UNIT is static (no [Install]) and not wanted by multi-user.target, so only its
+# timer starts it.
+timer_only() {
+  local state
+  state="$(systemctl is-enabled "$1" 2>/dev/null || true)"
+  if [[ $state == "static" && ! -e /etc/systemd/system/multi-user.target.wants/$1 && ! -L /etc/systemd/system/multi-user.target.wants/$1 ]]; then
+    ok "$1 is static (started by its timer, not at boot)"
+  else
+    no "$1 is '${state:-unknown}' or wanted by multi-user.target (it would run before the network is up)"
+  fi
+}
 
 # Never `cmd | grep -q` here: under pipefail grep -q's early exit SIGPIPEs the producer and the
 # pipeline reports failure even on a match. Capture output first, then match in the shell.
@@ -126,16 +137,21 @@ echo "== Flatpak provisioning =="
 command -v flatpak >/dev/null 2>&1 && ok "flatpak" || no "flatpak missing"
 help="$(flatpak preinstall --help 2>&1 || true)"
 case $help in *preinstall*) ok "flatpak preinstall CLI available" ;; *) no "flatpak has no preinstall subcommand" ;; esac
-[[ -s /etc/flatpak/remotes.d/flathub.flatpakrepo ]] && ok "Flathub remote baked (DNS-free first boot)" || no "flathub.flatpakrepo missing"
+[[ -s /etc/flatpak/remotes.d/flathub.flatpakrepo ]] && ok "Flathub remote baked (registering it downloads nothing)" || no "flathub.flatpakrepo missing"
 [[ "$(readlink -f /etc/systemd/system/flatpak-add-fedora-repos.service)" == "/dev/null" ]] \
   && ok "flatpak-add-fedora-repos masked (Flathub is the only remote)" || no "flatpak-add-fedora-repos not masked"
-for u in fenoa-flatpak-preinstall.service fenoa-brew-setup.service; do
-  [[ -L /etc/systemd/system/multi-user.target.wants/$u ]] && ok "$u enabled" || no "$u not enabled"
+# The preinstall waits for the network itself: fenoa-online skips it until the remotes answer over
+# HTTPS, and its timer starts it again until it has run. Started at boot instead (multi-user.target),
+# it would run before Wi-Fi is up, and offline `flatpak preinstall` exits 0 having installed nothing.
+[[ -x /usr/libexec/fenoa-online ]] && ok "fenoa-online (the provisioning units' network check)" || no "fenoa-online missing or not executable"
+# fenoa-online asks each host over HTTPS with curl; without it every provisioning unit fails.
+command -v curl >/dev/null 2>&1 && ok "curl (fenoa-online's HTTPS check)" || no "curl missing — fenoa-online cannot check the network"
+timer_only fenoa-flatpak-preinstall.service
+for t in fenoa-flatpak-preinstall fenoa-flatpak-update; do
+  [[ -L /etc/systemd/system/timers.target.wants/$t.timer ]] && ok "$t.timer enabled" || no "$t.timer not enabled"
 done
-[[ -L /etc/systemd/system/timers.target.wants/fenoa-flatpak-update.timer ]] \
-  && ok "fenoa-flatpak-update.timer enabled" || no "fenoa-flatpak-update.timer not enabled"
 unit="$(cat /usr/lib/systemd/system/fenoa-flatpak-preinstall.service 2>/dev/null || true)"
-case $unit in *Restart=on-failure*) ok "preinstall retries on failure" ;; *) no "preinstall unit has no Restart=on-failure" ;; esac
+case $unit in *"ExecCondition=/usr/libexec/fenoa-online dl.flathub.org registry.fedoraproject.org"*) ok "preinstall waits until the remotes answer" ;; *) no "preinstall has no fenoa-online condition (it would run offline and exit 0)" ;; esac
 case $unit in *"--prio=10 flathub"*"--prio=1 fedora"*) ok "Flathub outranks Fedora's registry (OBS-only fallback)" ;; *) no "remote priorities not set (Fedora would win ties)" ;; esac
 case $unit in *"dbus-run-session -- /usr/bin/flatpak preinstall"*) ok "preinstall runs under dbus-run-session" ;; *) no "preinstall not wrapped in dbus-run-session (dies without a session bus)" ;; esac
 # ...and dbus-run-session must exist: base-atomic has none, and without it the units fail with
@@ -146,6 +162,8 @@ echo "== Homebrew ships prebuilt (ublue brew image) =="
 [[ -s /usr/share/homebrew.tar.zst ]] && ok "homebrew.tar.zst shipped" || no "homebrew.tar.zst missing"
 [[ -f /usr/share/fenoa/Brewfile ]] && ok "/usr/share/fenoa/Brewfile" || no "Brewfile missing"
 [[ -L /etc/systemd/system/multi-user.target.wants/brew-setup.service ]] && ok "brew-setup.service enabled" || no "brew-setup.service not enabled"
+[[ -L /etc/systemd/system/multi-user.target.wants/fenoa-brew-setup.service ]] \
+  && ok "fenoa-brew-setup.service enabled" || no "fenoa-brew-setup.service not enabled"
 for t in brew-update brew-upgrade; do
   [[ -L /etc/systemd/system/timers.target.wants/$t.timer ]] && ok "$t.timer enabled" || no "$t.timer not enabled"
 done

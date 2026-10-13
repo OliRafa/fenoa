@@ -45,7 +45,7 @@ This is the first boot of a fresh install (`deploy/fenoa-install`, or any `bootc
 1. `systemd-firstboot` asks on tty1 for the locale, the keymap and the timezone. It asks for no hostname (set one later with `hostnamectl hostname <name>`) and no root password: root stays locked, and the user you create next gets `sudo`. The login screen and Hyprland follow the keymap you pick.
 2. `fenoa-firstboot-user` asks for your username, full name and password on tty1 (or reads a preseed from `/etc/fenoa/firstboot-user.conf`). The account's login shell is zsh, with Fedora's stock configuration (the `~/.zshrc` and `~/.zprofile` the zsh package puts in `/etc/skel`).
 3. The greeter comes up; log in to the **Hyprland (uwsm-managed)** session. Noctalia's setup wizard takes it from there.
-4. In the background the Flatpak apps and the Brewfile install once the network is up. A reboot or two later, `fenoa-apply-m1n1` has refreshed m1n1 and the devicetree for the installed kernel.
+4. In the background the Flatpak apps install once the network is up: until Flathub and Fedora's registry answer over HTTPS, the install is tried again every couple of minutes, so connecting to Wi-Fi from the desktop is enough. An install that fails is tried again a couple of minutes later too. Only if a remote answers but its index then cannot be fetched does `flatpak preinstall` report "Nothing to do." and succeed, and the app set waits for the next boot. The Brewfile installs once the network is up too. A reboot or two later, `fenoa-apply-m1n1` has refreshed m1n1 and the devicetree for the installed kernel.
 
 Then, for DRM video in Brave: open Brave once, and run `fenoa-widevine`.
 

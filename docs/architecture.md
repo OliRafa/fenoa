@@ -26,7 +26,7 @@ The split follows one rule: the **platform** stage holds everything a non-graphi
 | P5 | rebuild the initramfs with the `bootc` dracut module | composefs pivot; Apple HID drivers loaded early |
 | P6 | `DTBS` → image devicetree; enable `fenoa-apply-m1n1` | m1n1/devicetree refresh on atomic |
 | P7 | enable `fenoa-firstboot-user` (`systemd-firstboot` is static and needs no enabling) | the image ships no user |
-| P8 | ublue brew tree + Brewfile; baked Flathub remote; enable provisioning units | `/var` is seeded only on first boot |
+| P8 | ublue brew tree + Brewfile; baked Flathub remote; enable the provisioning units (the Flatpak preinstall through its timer) | `/var` is seeded only on first boot; see [Provisioning and the network](#provisioning-and-the-network) |
 | P9 | enable system services; mask NetworkManager-wait-online; disable sshd and drop `ssh` from the default firewalld zone | SSH is opt-in; `50-fenoa.preset` keeps a preset pass from re-enabling sshd |
 | P10 | `/etc/machine-id` = `uninitialized`; clean residue; `bootc container lint` | systemd detects each install's first boot (an empty file does not count), so systemd-firstboot runs |
 
@@ -87,5 +87,22 @@ m1n1 → U-Boot → systemd-boot → kernel + initramfs (bootc composefs pivot, 
   → greetd → fenoa-greeter-session (XKB_DEFAULT_* from fenoa/keyboard.lua) → noctalia-greeter-session
       (bundled wlroots compositor) → PAM (/etc/pam.d/greetd, keyring unlock)
   → uwsm start hyprland.desktop → Hyprland → uwsm-app noctalia
-background: fenoa-apply-m1n1, fenoa-flatpak-preinstall, brew-setup → fenoa-brew-setup
+background: fenoa-apply-m1n1, brew-setup → fenoa-brew-setup
+timers, once the network is up: fenoa-flatpak-preinstall (30s after boot, then every 2 min until the remotes answer and it runs)
 ```
+
+## Provisioning and the network
+
+The image masks `NetworkManager-wait-online`, so nothing in the boot waits for the network and `network-online.target` is reached before Wi-Fi has associated; on a fresh install Wi-Fi is not even configured until the user sets it up in the session. A unit that needs the network therefore cannot be started at boot and ordered after `network-online.target`: it runs offline. For `flatpak preinstall` that is silent, because offline it skips every ref it cannot reach, prints "Nothing to do." and exits 0.
+
+The units that need the network wait for it themselves:
+
+- `ExecCondition=/usr/libexec/fenoa-online [--wait=SECONDS] HOST...` asks each host the unit is about to talk to for `https://HOST/` with curl (each request bounded by a timeout). Any HTTP status counts as an answer, but the certificate has to validate: a name that merely resolves is not enough, because a captive portal, or a host pinned to the wrong address, resolves too and `flatpak preinstall` still exits 0 having installed nothing. While a host does not answer it exits 1 and systemd skips the unit: inactive, not failed. `--wait` keeps asking every few seconds for a bounded time before giving up. Misuse, or a check that cannot run (no curl, no CA bundle), exits 255, which systemd counts as a failure rather than a skip, so a broken condition is reported instead of skipping forever; the Flatpak units then show in `systemctl --failed`.
+- A timer starts the unit `OnBootSec=30s` and again `OnUnitInactiveSec=2min` after each run that ended inactive (skipped) or failed.
+- The service is `Type=oneshot` with `RemainAfterExit=yes` and no `[Install]` section: a run that exits 0 stays active, so the timer has nothing left to start until the next boot. With `--noninteractive`, an install or download error makes `flatpak preinstall` exit 1, so the unit fails and the timer tries again 2 minutes later. One case waits for the next boot: a remote passes the HTTPS check but its index then cannot be fetched, and `flatpak preinstall` skips its refs, prints "Nothing to do." and exits 0.
+- The service has no `Condition*=` at all: a unit skipped by a plain condition is inactive too, so the timer would start it every 2 minutes for the rest of the boot.
+
+| Unit | Started by | Waits for |
+|---|---|---|
+| `fenoa-flatpak-preinstall.service` | `fenoa-flatpak-preinstall.timer`, every boot (later additions to the app set apply; apps the user removed stay removed) | `dl.flathub.org`, `registry.fedoraproject.org` |
+| `fenoa-flatpak-update.service` | `fenoa-flatpak-update.timer`, daily | the same hosts, with `--wait=300`: the catch-up run fires at boot or right at resume, before Wi-Fi has reconnected, and nothing retries it, so it waits up to 5 minutes for the network (then checks for a metered link) and only then skips until the next day |

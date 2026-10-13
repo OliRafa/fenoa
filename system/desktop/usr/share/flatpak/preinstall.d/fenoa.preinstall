@@ -1,10 +1,11 @@
 # Fenoa — GUI apps delivered as Flatpaks on first boot.
 #
-# A Fedora/flatpak-native "preinstall" manifest (see flatpak-preinstall(1)): fenoa-flatpak-preinstall
-# runs `flatpak preinstall -y` at startup and installs the groups below. The upstream CLI owns the
-# install logic, the idempotency and the opt-out: an app the user uninstalls is remembered and not
-# reinstalled. Branch=stable because that is Flathub's branch (the flatpak default, "master", does
-# not exist there and an unpinned group silently installs nothing).
+# A Fedora/flatpak-native "preinstall" manifest (see flatpak-preinstall(1)): on every boot,
+# fenoa-flatpak-preinstall.service runs `flatpak preinstall -y` once the remotes answer over HTTPS
+# (its timer tries 30s after boot, then every 2 minutes) and installs the groups below. The upstream
+# CLI owns the install logic, the idempotency and the opt-out: an app the user uninstalls is
+# remembered and not reinstalled. Branch=stable because that is Flathub's branch (the flatpak
+# default, "master", does not exist there and an unpinned group silently installs nothing).
 #
 # Each app comes from the first remote, by priority, that has it for aarch64: Flathub (priority 10),
 # then Fedora's Flatpak registry (priority 1) — set up by fenoa-flatpak-preinstall.service. A ref no

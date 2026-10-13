@@ -6,7 +6,9 @@ Documentation=man:flatpak-update(1)
 # Daily, catching up after downtime (Persistent), jittered so a fleet does not hit Flathub at once.
 # fenoa-flatpak-preinstall.service handles the FIRST install; this only keeps the set current after,
 # the way ublue's flatpak-system-update.timer does. flatpak's system-helper serialises any overlap
-# with a still-running first-boot preinstall, so the two never corrupt each other.
+# with a still-running first-boot preinstall, so the two never corrupt each other. A run that fires
+# before the network is up (at boot, or on resume) waits up to 5 minutes for it in the service's
+# fenoa-online condition; if it is still down, the run is skipped until the next daily one.
 OnCalendar=daily
 Persistent=true
 RandomizedDelaySec=10min

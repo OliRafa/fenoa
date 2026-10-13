@@ -4,29 +4,42 @@ Documentation=man:flatpak-preinstall(1)
 # Runs Fedora/flatpak's upstream `flatpak preinstall`, which reads /usr/share/flatpak/preinstall.d
 # and installs the vendor app set — the install logic, idempotency and user opt-out are all upstream.
 # This is bluefin-common's flatpak-preinstall.service, adapted: Fedora packages the CLI but no boot
-# unit, and two things differ from bluefin because our platform differs (see below).
-ConditionPathExists=/usr/bin/flatpak
-# network-online.target is NOT a real barrier here: the image masks NetworkManager-wait-online
-# (images/fenoa/Containerfile), so it is reached before DHCP/DNS. Keep it as a best-effort
-# hint, but the real robustness is Restart=on-failure below.
-Wants=network-online.target
-After=network-online.target
-# Register Flathub before the system-helper starts, from the baked local file — no network needed.
-Before=flatpak-system-helper.service
-# Retry WITHOUT a cap. bluefin bounds this (StartLimitIntervalSec=600, StartLimitBurst=3) because on
-# their images network-online.target is real, so the network is up by the time it runs and 3 tries
-# suffice. Ours is masked, so this can fire long before DNS answers — a 3-try cap would give up while
-# the network is still coming up, which is the exact failure this unit exists to prevent.
-StartLimitIntervalSec=0
+# unit, and it differs from bluefin where our platform differs (see below).
+#
+# No [Install] section: fenoa-flatpak-preinstall.timer starts this, never a boot target
+# (DIVERGENCE 1). No Condition*= either, not even bluefin's ConditionPathExists=/usr/bin/flatpak
+# (the build fails without flatpak anyway): a unit skipped by a condition is inactive, and the timer
+# would start it again every 2 minutes for the rest of the boot.
+#
+# No Before=flatpak-system-helper.service, unlike bluefin: flatpak reads /etc/flatpak/remotes.d by
+# itself, and with that ordering a `flatpak install` the user starts during a long preinstall waits
+# for the whole run to finish before the helper starts, and fails on the D-Bus timeout.
 
 [Service]
 Type=oneshot
+# A run that succeeds stays active, which is what stops the timer from starting it again this boot.
 RemainAfterExit=yes
-# DIVERGENCE 1: add the remotes at first boot rather than bluefin's build-time `flatpak remote-add`.
-# A build-time system remote writes to /var/lib/flatpak, and our composefs-native image ships a FRESH
+# DIVERGENCE 1: wait for the network with a condition and a timer, not network-online.target.
+# bluefin orders this after network-online.target and retries with Restart=on-failure. Neither works
+# here: the image masks NetworkManager-wait-online (images/fenoa/Containerfile), so
+# network-online.target is reached before Wi-Fi has associated — on a fresh install Wi-Fi is not
+# even configured until the user sets it up in the session — and offline `flatpak preinstall` skips
+# every ref it cannot reach, prints "Nothing to do." and EXITS 0. Restart=on-failure never fired,
+# RemainAfterExit kept the unit "active", and the app set silently never installed. Instead:
+#  - fenoa-online skips the run (inactive, not failed) until both remotes answer over HTTPS with a
+#    valid certificate (resolving the names is not enough: a captive portal resolves them too);
+#  - the timer starts a skipped or failed run again 2 minutes after it ended (OnUnitInactiveSec=):
+#    with --noninteractive, an install or download error aborts preinstall with exit 1, so a pull
+#    that breaks off is retried 2 minutes later;
+#  - a run that exits 0 stays active (RemainAfterExit=yes), so the timer has nothing left to do.
+# One case still waits for the next boot: a remote that passes the HTTPS check but whose index then
+# cannot be fetched. preinstall skips its refs as if offline, prints "Nothing to do." and exits 0.
+ExecCondition=/usr/libexec/fenoa-online dl.flathub.org registry.fedoraproject.org
+# DIVERGENCE 2: add the remotes here rather than bluefin's build-time `flatpak remote-add`. A
+# build-time system remote writes to /var/lib/flatpak, and our composefs-native image ships a FRESH
 # /var seeded only on first boot, so it would not survive to here. Flathub comes from the local file
-# baked by images/fenoa/Containerfile and needs no DNS; adding Fedora's OCI remote fetches nothing
-# either.
+# baked by images/fenoa/Containerfile and needs no download; adding Fedora's OCI remote fetches
+# nothing either.
 #
 # Two remotes, Flathub first. `flatpak preinstall` installs each app from the first remote, in
 # priority order, that has it for this architecture, and breaks ties alphabetically — so with equal
@@ -45,12 +58,3 @@ ExecStartPre=/usr/bin/flatpak remote-modify --system --prio=1 fedora
 # No stamp and run on every boot on purpose: `flatpak preinstall` is a fast no-op once satisfied, it
 # applies later additions to the app set, and it honours apps the user has since removed.
 ExecStart=/usr/bin/dbus-run-session -- /usr/bin/flatpak preinstall -y --noninteractive
-# The pulls need the network, which is masked out of network-online.target here. When a pull fails
-# `flatpak preinstall` exits non-zero and systemd re-runs this in 30s — out of the boot path, no
-# reboot required. It stops of its own accord once every app is present (a clean exit is not
-# restarted).
-Restart=on-failure
-RestartSec=30
-
-[Install]
-WantedBy=multi-user.target

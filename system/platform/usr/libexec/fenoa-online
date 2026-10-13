@@ -1,0 +1,116 @@
+#!/bin/bash
+# fenoa-online [--wait=SECONDS] HOST... — an ExecCondition= for units that need the network:
+# succeeds once every HOST answers over HTTPS.
+#
+# The image masks NetworkManager-wait-online (images/fenoa/Containerfile, P9), so
+# network-online.target is reached before Wi-Fi has even associated, and a unit ordered after it
+# still runs offline. Some commands do not fail when that happens: offline, `flatpak preinstall`
+# skips every ref it cannot reach, prints "Nothing to do." and exits 0, so neither Restart= nor a
+# retry ever saw a failure and the app set never installed.
+#
+# Resolving the name is not enough: with dl.flathub.org pointed at 127.0.0.1, or behind a captive
+# portal that answers DNS itself, the host resolves and `flatpak preinstall` still installs nothing
+# and exits 0. So each HOST must answer an HTTPS request whose certificate validates, which a portal
+# cannot fake. Any HTTP status counts (ghcr.io answers a bare request with an error status): the
+# question is whether the server is reachable, not what it says to `HEAD /`.
+#
+#   --wait=SECONDS  keep checking every few seconds for up to SECONDS (0-999999, plain decimal)
+#                   before giving up. For a unit whose timer fires once rather than retrying: the
+#                   daily Flatpak update fires on resume, before Wi-Fi has reconnected.
+#
+# Exit status, as ExecCondition= reads it:
+#   0    every HOST answered
+#   1    a HOST did not answer (no network, no DNS, no route, a certificate that does not validate,
+#        or a timeout), after --wait if given: the unit is skipped (inactive, not failed)
+#   255  misuse, or a check that cannot run at all (curl missing, no CA bundle): systemd counts it as
+#        a failure, not a skip, so a broken condition is reported instead of skipping the unit
+#        forever. What a failure then does is the unit's business: one without Restart= shows in
+#        `systemctl --failed`; one with Restart= retries it like any other failure.
+set -uo pipefail
+
+# Overridable for test/unit.d/online-test.sh. The per-request bound matters: a oneshot has no start
+# timeout by default, and a black-holed route would otherwise hold the unit for minutes.
+request_timeout="${FENOA_ONLINE_TIMEOUT:-10}"
+retry_interval="${FENOA_ONLINE_INTERVAL:-5}"
+
+misuse() {
+  echo "fenoa-online: $1" >&2
+  echo "usage: fenoa-online [--wait=SECONDS] HOST..." >&2
+  exit 255
+}
+
+# Every number that reaches arithmetic is plain decimal with a bounded number of digits. Bash reads a
+# leading 0 as octal ("08" is an error, "0300" is 192) and wraps huge values; an arithmetic error in
+# the loop condition below would keep it going forever, and a oneshot has no start timeout.
+decimal='^(0|[1-9][0-9]{0,5})$'
+[[ $request_timeout =~ $decimal && $request_timeout != "0" ]] ||
+  misuse "FENOA_ONLINE_TIMEOUT must be a whole number of seconds, not '$request_timeout'"
+[[ $retry_interval =~ $decimal ]] ||
+  misuse "FENOA_ONLINE_INTERVAL must be a whole number of seconds, not '$retry_interval'"
+
+wait_for=0
+hosts=()
+for arg in "$@"; do
+  case $arg in
+    --wait=*)
+      wait_for=${arg#--wait=}
+      [[ $wait_for =~ $decimal ]] || misuse "--wait takes 0-999999 seconds in plain decimal, not '$wait_for'"
+      ;;
+    -*) misuse "unknown option '$arg'" ;;
+    *)
+      [[ $arg =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || misuse "'$arg' is not a host name"
+      hosts+=("$arg")
+      ;;
+  esac
+done
+(( ${#hosts[@]} > 0 )) || misuse "no host given"
+
+# check_hosts: 0 when every host answered, 1 (with $reason set) when one did not, 255 when curl
+# itself cannot do the check.
+reason=""
+check_hosts() {
+  local host err rc
+  for host in "${hosts[@]}"; do
+    # No --fail: any HTTP status is an answer. No --insecure: the certificate has to validate.
+    err=$(curl --silent --show-error --head --max-time "$request_timeout" --output /dev/null "https://$host/" 2>&1)
+    rc=$?
+    err=${err%%$'\n'*}   # its first line; curl explains certificate failures at length
+    case $rc in
+      0) ;;
+      # Unsupported protocol, failed to initialise, malformed URL, feature not built in, out of
+      # memory, internal error, unknown option, unreadable CA bundle, not executable, not found:
+      # the check is broken and would skip the unit forever.
+      1|2|3|4|27|43|48|77|126|127)
+        echo "fenoa-online: cannot check $host: ${err:-curl exited $rc}" >&2
+        return 255
+        ;;
+      *)
+        reason="$host does not answer over HTTPS yet (${err:-curl exited $rc})"
+        return 1
+        ;;
+    esac
+  done
+  return 0
+}
+
+deadline=$(( SECONDS + wait_for ))
+attempts=0
+while :; do
+  check_hosts
+  rc=$?
+  attempts=$(( attempts + 1 ))
+  if (( rc == 0 )); then
+    (( attempts == 1 )) || echo "fenoa-online: ${hosts[*]} answered after ${SECONDS}s"
+    exit 0
+  elif (( rc == 255 )); then
+    exit 255
+  elif (( wait_for == 0 || SECONDS + retry_interval > deadline )); then
+    if (( wait_for > 0 )); then
+      echo "fenoa-online: $reason; gave up after ${SECONDS}s (--wait=$wait_for), skipping"
+    else
+      echo "fenoa-online: $reason, skipping"
+    fi
+    exit 1
+  fi
+  sleep "$retry_interval"
+done

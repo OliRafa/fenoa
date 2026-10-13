@@ -169,12 +169,17 @@ RUN set -eux; \
 #
 #     Flatpaks use Fedora/flatpak's upstream `flatpak preinstall` (manifests under
 #     /usr/share/flatpak/preinstall.d — the desktop stage ships the app set). The Flathub remote is
-#     baked in as a LOCAL file so `remote-add` at first boot needs no DNS (NetworkManager-wait-online
-#     is masked below, so network-online.target is reached before the network is up); the build
-#     fails rather than ship an image whose remote step is back on the network.
+#     baked in as a LOCAL file so registering it at first boot downloads nothing; the build fails
+#     rather than ship an image whose remote step is back on the network.
 #     flatpak-add-fedora-repos.service is masked: it would add Fedora's remotes (including
 #     fedora-testing) at Flathub's priority, and Fedora wins priority ties. The preinstall unit adds
 #     Fedora's stable remote itself, below Flathub, for the one app Flathub lacks on aarch64 (OBS).
+#
+#     The preinstall runs from a TIMER, not from multi-user.target. NetworkManager-wait-online is
+#     masked (P9), so a boot-time start runs before Wi-Fi is up, and offline `flatpak preinstall`
+#     exits 0 having installed nothing. fenoa-flatpak-preinstall.timer starts the service 30s after
+#     boot and again every 2 minutes while its fenoa-online condition skips it (the remotes do not
+#     answer over HTTPS yet) or it fails; the service has no [Install] section of its own.
 COPY --from=brew /system_files/ /
 COPY Brewfile /usr/share/fenoa/Brewfile
 RUN set -eux; \
@@ -185,13 +190,14 @@ RUN set -eux; \
       https://dl.flathub.org/repo/flathub.flatpakrepo; \
     [ -s /etc/flatpak/remotes.d/flathub.flatpakrepo ] || { echo "[P8] failed to bake flathub.flatpakrepo"; exit 1; }; \
     systemctl mask flatpak-add-fedora-repos.service; \
-    systemctl enable fenoa-flatpak-preinstall.service fenoa-flatpak-update.timer fenoa-brew-setup.service; \
+    systemctl enable fenoa-flatpak-preinstall.timer fenoa-flatpak-update.timer fenoa-brew-setup.service; \
     systemctl enable brew-setup.service brew-update.timer brew-upgrade.timer
 
 # P9) System services. Nothing in the session needs to block on the network, so mask
 #     NetworkManager-wait-online and let network-online.target pass without waiting for DHCP/Wi-Fi
-#     association; the first-boot provisioning units retry on their own instead. systemd-oomd's
-#     [Install] pulls in systemd-oomd.socket, which the user manager reports app.slice candidacy over.
+#     association; the units that need the network wait for it themselves instead (the Flatpak
+#     units check that their remotes answer with fenoa-online, P8). systemd-oomd's [Install] pulls
+#     in systemd-oomd.socket, which the user manager reports app.slice candidacy over.
 #
 #     SSH is opt-in. Fedora presets sshd enabled and its default firewalld zone allows ssh, so a
 #     laptop would accept password logins from the network out of the box. Disable the unit

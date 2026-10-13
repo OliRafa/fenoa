@@ -1,0 +1,17 @@
+[Unit]
+Description=Preinstall the Fenoa Flatpak app set once the network is up
+Documentation=man:flatpak-preinstall(1)
+
+[Timer]
+# Starts fenoa-flatpak-preinstall.service 30s into every boot, then again 2 minutes after each run
+# that ended without exit 0: one its fenoa-online condition skipped (the remotes do not answer over
+# HTTPS yet) or one that failed. A run that exits 0 stays active (RemainAfterExit=yes), so it never
+# becomes inactive again and the timer is done for this boot. Every boot on purpose: later additions
+# to the app set apply, and `flatpak preinstall` honours apps the user has since removed.
+OnBootSec=30s
+OnUnitInactiveSec=2min
+# The default AccuracySec=1min would let each start slip by up to a minute.
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

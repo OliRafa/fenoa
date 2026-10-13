@@ -60,6 +60,7 @@ docker-buildx
 
 # --- Provisioning (first-boot Flatpak preinstall; Homebrew ships prebuilt from ublue's image) ---
 flatpak
+curl                        # fenoa-online's HTTPS check; base-atomic ships it, listed so it stays
 dbus-tools                  # dbus-run-session: the Flatpak units need a session bus (see the units)
 dbus-daemon                 # ...which dbus-run-session starts; base-atomic ships neither
 
