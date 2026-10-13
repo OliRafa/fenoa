@@ -196,10 +196,40 @@ pass "a second locker cannot replace the live session lock"
 
 manifest="$D/usr/share/flatpak/preinstall.d/fenoa.preinstall"
 mime="$D/usr/share/applications/hyprland-mimeapps.list"
-groups=$(grep -cE '^\[Flatpak Preinstall ' "$manifest")
-branches=$(grep -cE '^Branch=stable$' "$manifest")
-(( groups > 0 && groups == branches )) || fail "every preinstall group pins Branch=stable ($groups groups, $branches stable)"
-pass "every preinstall group pins Branch=stable"
+# One line per group: NAME BRANCH ISRUNTIME ("-" for a key the group does not set).
+preinstall_groups=$(awk '
+  function flush() { if (name != "") print name, (branch == "" ? "-" : branch), (runtime == "" ? "-" : runtime) }
+  /^\[Flatpak Preinstall / { flush(); name = $3; sub(/\]$/, "", name); branch = ""; runtime = ""; next }
+  /^Branch=/ { branch = substr($0, 8) }
+  /^IsRuntime=/ { runtime = substr($0, 11) }
+  END { flush() }
+' "$manifest")
+[[ -n $preinstall_groups ]] || fail "the preinstall manifest has groups"
+# An app group without Branch=stable installs nothing from Flathub (the default branch is "master").
+bad_apps=$(awk '$3 != "true" && !($2 == "stable" && $3 == "false")' <<<"$preinstall_groups")
+[[ -z $bad_apps ]] || fail "every app group pins Branch=stable and IsRuntime=false" "$bad_apps"
+pass "every app group pins Branch=stable and IsRuntime=false"
+
+# GTK3 inside the sandbox (and Qt, through the runtime's libqgtk3) can only use a GTK theme its
+# runtime carries. Noctalia switches between adw-gtk3 and adw-gtk3-dark, and flatpak's auto-download
+# never fetches either here (it follows the GTK theme of the user running it, and the preinstall and
+# updates run as root, on plain Adwaita), so both extensions are preinstalled, from their 3.22 branch.
+for theme in org.gtk.Gtk3theme.adw-gtk3 org.gtk.Gtk3theme.adw-gtk3-dark; do
+  grep -qx "$theme 3.22 true" <<<"$preinstall_groups" ||
+    fail "the Flatpak set includes the $theme runtime extension (Branch=3.22, IsRuntime=true)" "$(grep -F "$theme" <<<"$preinstall_groups")"
+done
+bad_runtimes=$(awk '$3 == "true" && $1 !~ /^org\.gtk\.Gtk3theme\./' <<<"$preinstall_groups")
+[[ -z $bad_runtimes ]] || fail "the only runtimes in the set are the GTK3 theme extensions" "$bad_runtimes"
+pass "the light and dark adw-gtk3 theme extensions are preinstalled (Branch=3.22, IsRuntime=true)"
+
+# The Qt half: Qt apps take their palette from GTK3 only because the session asks for the gtk3
+# platform theme, and Flatpak passes that variable into the sandbox.
+grep -qx 'export QT_QPA_PLATFORMTHEME=gtk3' "$D/usr/share/uwsm/env.d/10-fenoa" ||
+  fail "the uwsm session environment exports QT_QPA_PLATFORMTHEME=gtk3 (Qt Flatpaks follow GTK3's theme)"
+builtin_ids=$(toml "$noctalia_defaults" 't["theme"]["templates"]["builtin_ids"]')
+[[ $builtin_ids == *gtk3* && $builtin_ids == *gtk4* ]] ||
+  fail "Noctalia's gtk3/gtk4 templates are on (they switch the GTK theme and color-scheme)" "builtin_ids: $builtin_ids"
+pass "the session exports QT_QPA_PLATFORMTHEME=gtk3, and Noctalia's gtk templates drive the theme"
 
 for app in com.brave.Browser org.gnome.Loupe org.gnome.Evince org.libreoffice.LibreOffice md.obsidian.Obsidian \
            org.localsend.localsend_app com.obsproject.Studio; do

@@ -4,8 +4,9 @@
 # fenoa-flatpak-preinstall.service runs `flatpak preinstall -y` once the remotes answer over HTTPS
 # (its timer tries 30s after boot, then every 2 minutes) and installs the groups below. The upstream
 # CLI owns the install logic, the idempotency and the opt-out: an app the user uninstalls is
-# remembered and not reinstalled. Branch=stable because that is Flathub's branch (the flatpak
-# default, "master", does not exist there and an unpinned group silently installs nothing).
+# remembered and not reinstalled. Apps pin Branch=stable because that is Flathub's branch (the
+# flatpak default, "master", does not exist there and an unpinned group silently installs nothing);
+# the GTK3 theme extensions at the end have their own branch, 3.22.
 #
 # Each app comes from the first remote, by priority, that has it for aarch64: Flathub (priority 10),
 # then Fedora's Flatpak registry (priority 1) — set up by fenoa-flatpak-preinstall.service. A ref no
@@ -49,3 +50,24 @@ IsRuntime=false
 [Flatpak Preinstall com.obsproject.Studio]
 Branch=stable
 IsRuntime=false
+
+# Light/dark for GTK3 and Qt apps inside the sandbox. On every light/dark switch Noctalia's gtk
+# template sets the color-scheme setting and the GTK theme (adw-gtk3 or adw-gtk3-dark), and the
+# settings portal hands both to Flatpak apps. GTK4/libadwaita, Firefox, Chromium and Electron follow
+# color-scheme on their own, but GTK3 ignores it and can only load a theme its runtime carries:
+# without these it falls back to light Adwaita in dark mode. Qt apps go the same way, through the
+# runtime's libqgtk3 (the session exports QT_QPA_PLATFORMTHEME=gtk3, and Flatpak passes it in).
+#
+# These are the theme extensions for runtimes on org.freedesktop, org.gnome and org.kde (Flathub's).
+# Nothing else installs them: flatpak's own auto-download fetches only the GTK theme active for the
+# user running it, and the preinstall and the daily update run as root, whose theme is plain
+# Adwaita. Both are listed because Noctalia switches between the two, and the one not yet used must
+# already be there when it does. Apps on Fedora's runtimes (OBS) take org.fedoraproject.Gtk3theme.*,
+# and Fedora ships no adw-gtk3-dark.
+[Flatpak Preinstall org.gtk.Gtk3theme.adw-gtk3]
+Branch=3.22
+IsRuntime=true
+
+[Flatpak Preinstall org.gtk.Gtk3theme.adw-gtk3-dark]
+Branch=3.22
+IsRuntime=true

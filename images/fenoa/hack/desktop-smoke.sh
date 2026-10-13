@@ -135,6 +135,13 @@ manifest="$(cat /usr/share/flatpak/preinstall.d/fenoa.preinstall 2>/dev/null || 
 for app in com.brave.Browser org.gnome.Loupe org.gnome.Evince org.libreoffice.LibreOffice md.obsidian.Obsidian org.localsend.localsend_app com.obsproject.Studio; do
   case $manifest in *"[Flatpak Preinstall $app]"*) ok "Flatpak preinstall: $app" ;; *) no "Flatpak preinstall lacks $app" ;; esac
 done
+# GTK3 (and Qt) inside the sandbox follow light/dark only with both adw-gtk3 theme extensions.
+for theme in org.gtk.Gtk3theme.adw-gtk3 org.gtk.Gtk3theme.adw-gtk3-dark; do
+  case $manifest in
+    *"[Flatpak Preinstall $theme]"$'\n'"Branch=3.22"$'\n'"IsRuntime=true"*) ok "Flatpak preinstall: $theme//3.22 (runtime)" ;;
+    *) no "Flatpak preinstall lacks $theme (Branch=3.22, IsRuntime=true)" ;;
+  esac
+done
 mono="$(fc-match -f '%{family}' monospace 2>/dev/null || true)"
 case $mono in "Source Code Pro"*) ok "monospace resolves to Source Code Pro (system-wide, so the greeter can use it)" ;; *) no "monospace resolves to '${mono:-?}', not Source Code Pro" ;; esac
 zone="$(firewall-offline-cmd --get-default-zone 2>/dev/null || true)"

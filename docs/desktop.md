@@ -14,7 +14,8 @@ Fenoa's session is Hyprland (Lua config) managed by uwsm, with Noctalia v5 as th
 | Keyring | gnome-keyring | unlocked with the login password (`/etc/pam.d/greetd`); Flatpak apps reach it through the Secret portal, which `/etc/xdg-desktop-portal/hyprland-portals.conf` routes to gnome-keyring because its portal only offers itself under GNOME (the other portals stay `hyprland`, then `gtk`) |
 | Clipboard history, screenshots, emoji, calculator | Noctalia | launcher providers `/emo`, `/calc`, `/win`, `/session`, `/wall` |
 | Night light | Noctalia | wlr-gamma-control; no hyprsunset |
-| Theming | Noctalia templates | `gtk3`, `gtk4` (adw-gtk3), `foot`, `hyprland` |
+| Theming | Noctalia templates | `gtk3`, `gtk4` (adw-gtk3), `foot`, `hyprland`. On each light/dark switch the gtk template sets `color-scheme` and the GTK theme (`adw-gtk3`/`adw-gtk3-dark`), which the settings portal hands to Flatpak apps |
+| Flatpak light/dark | the settings portal, plus the `org.gtk.Gtk3theme.adw-gtk3` and `adw-gtk3-dark` extensions (preinstalled) | GTK4/libadwaita, Firefox, Chromium and Electron follow `color-scheme`; GTK3 apps, and Qt apps through the runtime's GTK3 platform theme (`QT_QPA_PLATFORMTHEME=gtk3` in the session), load the dark or light theme extension. Both are preinstalled because nothing else would install them: flatpak only auto-downloads the GTK theme of the user running it, and the preinstall and daily update run as root, on plain Adwaita. Noctalia's palette colours stay on the host. Apps on Fedora's runtimes (OBS) take Fedora's theme extensions, and Fedora has no dark adw-gtk3 |
 | Login screen | noctalia-greeter (Terra) on greetd | its own wlroots compositor; state in `/var/lib/noctalia-greeter` |
 | Terminal | foot | via `xdg-terminal-exec` (`/etc/xdg/hyprland-xdg-terminals.list`); `~/.config/foot/foot.ini` sets `monospace:size=11` |
 | Files | Nautilus | |
