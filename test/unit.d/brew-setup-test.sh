@@ -2,8 +2,8 @@
 
 # fenoa-brew-setup.service hands Homebrew to the primary user and applies the Brewfile on first
 # boot. Homebrew ships PREBUILT in the image (ublue's brew image) and ublue's own brew-setup.service
-# unpacks it; this helper only re-owns the prefix and runs `brew bundle`. Three failure classes seen
-# on hardware in the image this was ported from are guarded here:
+# unpacks it; this helper only re-owns the prefix and runs `brew bundle`. Four failure classes are
+# guarded here; the first three were seen on hardware in the image this was ported from:
 #
 #  1. Picking the wrong account: `getent passwd` fields are name:passwd:uid:..., and printing $2
 #     resolved every machine's primary user to the password placeholder "x".
@@ -12,38 +12,85 @@
 #  3. Debris from (2): an EMPTY prefix directory makes ublue's brew-setup.service (gated on
 #     ConditionPathExists=!/home/linuxbrew/.linuxbrew) skip the unpack forever. The helper clears
 #     an empty prefix and ublue's marker so the unpack can run.
+#  4. Running before the network: started from multi-user.target, `brew bundle` ran before Wi-Fi
+#     was up (the image masks NetworkManager-wait-online) and failed until the next boot. A timer
+#     now starts it, and its condition waits for Homebrew's hosts to answer over HTTPS.
 
 source "$(dirname "$0")/base-test.sh"
 
-unit="$ROOT/system/platform/usr/lib/systemd/system/fenoa-brew-setup.service"
+units="$ROOT/system/platform/usr/lib/systemd/system"
+unit="$units/fenoa-brew-setup.service"
+timer="$units/fenoa-brew-setup.timer"
 helper="$ROOT/system/platform/usr/libexec/fenoa-brew-setup"
+containerfile="$ROOT/images/fenoa/Containerfile"
+preset="$ROOT/system/platform/usr/lib/systemd/system-preset/50-fenoa.preset"
 
 [[ -f $unit ]] || fail "the brew setup unit ships"
+[[ -f $timer ]] || fail "the brew setup timer ships"
 [[ -f $helper ]] || fail "the brew setup helper ships"
-pass "the brew setup unit and helper ship"
+pass "the brew setup unit, timer and helper ship"
 
 # --- unit wiring ------------------------------------------------------------------------------
 
-grep -q '^WantedBy=multi-user\.target' "$unit" || fail "unit is wired into multi-user.target"
-pass "unit is wired into multi-user.target"
+# Started at boot, `brew bundle` runs before Wi-Fi is up (NetworkManager-wait-online is masked) and
+# fails until the next boot; on a fresh install Wi-Fi is not even configured yet. A timer starts it
+# instead, and again while its condition skips it (Homebrew's hosts do not answer yet).
+if grep -qE '^\[Install\]|^(WantedBy|RequiredBy|UpheldBy|Alias|Also)=' "$unit"; then
+  fail "the brew setup service has no [Install] section (only its timer starts it)" "$(grep -nE '^\[Install\]|By=' "$unit")"
+fi
+pass "the brew setup service is static: only its timer starts it"
 
-# Fetching the installer and the bottles needs a network that is actually up, not merely
-# configured — network.target is reached long before that.
-grep -q '^After=network-online\.target' "$unit" || fail "unit waits for network-online.target"
-grep -q '^Wants=network-online\.target' "$unit" || fail "unit pulls in network-online.target"
-pass "unit waits for the network to be online"
+grep -qE '^OnBootSec=' "$timer" || fail "the timer starts the setup after boot (OnBootSec=)"
+grep -qE '^OnUnitInactiveSec=' "$timer" || fail "the timer starts a skipped run again (OnUnitInactiveSec=)"
+accuracy=$(sed -n 's/^AccuracySec=//p' "$timer")
+[[ $accuracy =~ ^([0-9]+)s$ ]] && (( BASH_REMATCH[1] < 60 )) ||
+  fail "the timer sets an AccuracySec= under a minute (the default 1min lets each start slip)" "got: ${accuracy:-<unset>}"
+target=$(sed -n 's/^Unit=//p' "$timer")
+[[ -z $target || $target == "fenoa-brew-setup.service" ]] || fail "the timer starts fenoa-brew-setup.service" "Unit=$target"
+grep -qx 'WantedBy=timers.target' "$timer" || fail "the timer is wired into timers.target"
+pass "the timer starts the setup after boot and again while it is skipped (AccuracySec=$accuracy)"
 
-# Ordering, not Requires=: if either has not happened the helper must say so and retry next boot,
-# never be silently skipped.
+# RemainAfterExit is what ends the timer's retries once a run succeeds.
+grep -qx 'Type=oneshot' "$unit" || fail "the brew setup service is a oneshot"
+grep -qx 'RemainAfterExit=yes' "$unit" ||
+  fail "a successful run stays active (RemainAfterExit=yes), which stops the timer for the boot"
+pass "a oneshot that stays active once it succeeds"
+
+# A `brew bundle` that keeps failing (a formula that will not build) must back off, not rebuild every
+# 2 minutes all boot. RestartMode=direct is load-bearing: without it each failure makes the unit
+# inactive for an instant, the timer's OnUnitInactiveSec= fires on top of the pending restart, and
+# its start cuts the delay short and resets the backoff (seen on systemd 259).
+restart=$(grep -E '^(Restart|RestartMode|RestartSec|RestartSteps|RestartMaxDelaySec)=' "$unit")
+expected=$'Restart=on-failure\nRestartMode=direct\nRestartSec=5min\nRestartSteps=5\nRestartMaxDelaySec=2h'
+[[ $restart == "$expected" ]] ||
+  fail "a failed run restarts with a growing delay, 5min up to 2h, without the timer cutting in" "got:"$'\n'"$restart"
+if grep -qE '^(StartLimitIntervalSec|StartLimitBurst)=' "$unit"; then
+  fail "no StartLimit*= overrides (restarts minutes apart never reach the default limit)" "$(grep -nE '^StartLimit' "$unit")"
+fi
+pass "a failed run backs off (Restart=on-failure, RestartMode=direct, 5min growing to 2h over 5 steps)"
+
+# "Already applied" must be a fast successful run, never a skip: a unit skipped by Condition*= is
+# inactive, so the timer would start it every 2 minutes for the rest of every boot.
+if grep -qE '^(Condition|Assert)[A-Za-z]*=' "$unit"; then
+  fail "no Condition*=/Assert*= (the timer would loop on it)" "$(grep -nE '^(Condition|Assert)' "$unit")"
+fi
+pass "no Condition*= the timer could loop on"
+
+# Ordering, not Requires=: if either has not happened the helper must say so and a later run
+# retries, never be silently skipped. It also holds a timer start back while fenoa-firstboot-user
+# waits at its tty1 prompt. Wants= queues the unpack again on every try: a no-op once it is done
+# (its ConditionPathExists=! guards), and the unpack itself once the helper has cleared debris.
 grep -q '^After=brew-setup\.service' "$unit" ||
   fail "unit is ordered after ublue's brew-setup.service (the unpack)"
+grep -q '^Wants=brew-setup\.service' "$unit" ||
+  fail "unit wants ublue's brew-setup.service, so every try queues the unpack again"
 grep -q '^After=fenoa-firstboot-user\.service' "$unit" ||
   fail "unit is ordered after the primary account is created"
-pass "unit is ordered after the unpack and the account"
+pass "unit wants and is ordered after the unpack, and is ordered after the account"
 if grep -qE '^(Requires|BindsTo)=brew-setup\.service' "$unit"; then
   fail "a hard dependency would skip the retry path" "$(grep -nE '^(Requires|BindsTo)=' "$unit")"
 fi
-pass "the dependency on the unpack is ordering only"
+pass "the dependency on the unpack is soft (no Requires=/BindsTo=)"
 
 # The network path is what kept failing. It must be gone, not merely guarded. Comments are
 # excluded: the helper documents the bug it used to have, and naming it is not doing it.
@@ -54,10 +101,61 @@ fi
 pass "the helper no longer downloads anything"
 
 # Drift guard: the unit promises "first boot", which holds only if the helper writes the stamp path
-# it also reads. Both come from the same default here.
+# it also reads, and the unit's condition looks for that same path.
 helper_stamp=$(sed -n 's/^STAMP="\${FENOA_BREW_STAMP:-\(.*\)}"$/\1/p' "$helper")
 [[ -n $helper_stamp ]] || fail "helper has a parseable stamp default"
 pass "helper stamps completion at $helper_stamp"
+
+# --- the condition: done, or online ---------------------------------------------------------------
+
+# Run the unit's own ExecCondition script, with the stamp and fenoa-online pointed into the sandbox.
+condition=$(sed -n "s/^ExecCondition=\/usr\/bin\/bash -c '\(.*\)'$/\1/p" "$unit")
+[[ -n $condition ]] || fail "the unit has a bash ExecCondition" "$(grep -n '^ExecCondition' "$unit")"
+[[ $condition == *"$helper_stamp"* ]] ||
+  fail "the condition checks the stamp the helper writes ($helper_stamp)" "$condition"
+[[ $condition == *"/usr/libexec/fenoa-online formulae.brew.sh ghcr.io"* ]] ||
+  fail "the condition waits for Homebrew's API and bottle hosts to answer" "$condition"
+pass "the condition checks the helper's stamp, else fenoa-online formulae.brew.sh ghcr.io"
+
+cond_tmp=$(mktemp -d)
+trap 'rm -rf "$cond_tmp"' EXIT
+cond_stamp="$cond_tmp/brew-setup-done"
+cat >"$cond_tmp/fenoa-online" <<'SH'
+#!/bin/bash
+printf '%s\n' "$*" >"${0%/*}/online.log"
+exit "${ONLINE_RC:-0}"
+SH
+chmod +x "$cond_tmp/fenoa-online"
+script=${condition//"$helper_stamp"/$cond_stamp}
+script=${script//\/usr\/libexec\/fenoa-online/$cond_tmp/fenoa-online}
+run_condition() { rm -f "$cond_tmp/online.log"; env ONLINE_RC="${ONLINE_RC:-0}" bash -c "$script"; }
+
+: >"$cond_stamp"
+ONLINE_RC=1 run_condition || fail "a stamped machine passes the condition at once, network or not"
+[[ ! -e $cond_tmp/online.log ]] || fail "a stamped machine does not wait for the network"
+pass "applied already: the condition passes at once (one instant no-op run, then the timer stops)"
+
+rm -f "$cond_stamp"
+ONLINE_RC=1 run_condition; rc=$?
+(( rc == 1 )) || fail "not applied and offline: the condition skips (1)" "exit $rc"
+[[ $(cat "$cond_tmp/online.log" 2>/dev/null) == "formulae.brew.sh ghcr.io" ]] ||
+  fail "not applied: the condition asks fenoa-online about Homebrew's hosts" "$(cat "$cond_tmp/online.log" 2>/dev/null)"
+ONLINE_RC=0 run_condition || fail "not applied and online: the condition passes"
+ONLINE_RC=255 run_condition; rc=$?
+(( rc == 255 )) || fail "a broken fenoa-online still fails the unit (255 passes through)" "exit $rc"
+pass "not applied yet: the condition is fenoa-online's verdict (skip offline, run online, fail when broken)"
+rm -rf "$cond_tmp"
+
+# --- build wiring ---------------------------------------------------------------------------------
+
+enabled=$(containerfile_units enable <"$containerfile")
+grep -qx 'fenoa-brew-setup\.timer' <<<"$enabled" || fail "the Containerfile enables fenoa-brew-setup.timer" "$enabled"
+grep -qx 'fenoa-brew-setup\.service' <<<"$enabled" &&
+  fail "the Containerfile does not enable the brew setup service itself (it would run before the network)"
+grep -qx 'enable fenoa-brew-setup.timer' "$preset" || fail "50-fenoa.preset enables the brew setup timer"
+grep -qE '^(enable|disable) fenoa-brew-setup\.service$' "$preset" &&
+  fail "50-fenoa.preset has no line for the static brew setup service" "$(grep -n 'fenoa-brew-setup' "$preset")"
+pass "the Containerfile and 50-fenoa.preset enable the timer, not the static service"
 
 # --- harness ------------------------------------------------------------------------------------
 
@@ -220,7 +318,7 @@ marker="$test_tmp/dot-linuxbrew"
 run_helper_m() { FENOA_BREW_MARKER="$marker" run_helper "$@"; }
 
 # The hardware case: an empty prefix, exactly what `install -d` left behind. It must be cleared so
-# brew-setup.service's ConditionPathExists=! can pass on the next boot.
+# brew-setup.service's ConditionPathExists=! can pass on the next try (the unit wants it).
 reset; mkdir -p "$prefix"; : >"$marker"
 HUMAN_USER=1 run_helper_m &&
   fail "an empty prefix fails the run" "$(cat "$test_tmp/out.log")"
@@ -228,7 +326,7 @@ pass "an empty prefix fails the run"
 grep -q "holds no Homebrew — clearing it" "$test_tmp/out.log" ||
   fail "the empty prefix is reported as debris" "$(cat "$test_tmp/out.log")"
 pass "the empty prefix is reported as debris"
-[[ ! -e $prefix ]] || fail "the empty prefix is removed so the unpack can run next boot"
+[[ ! -e $prefix ]] || fail "the empty prefix is removed so the unpack can run on the next try"
 pass "the empty prefix is removed"
 [[ ! -e $marker ]] || fail "ublue's marker is cleared too — it was claiming a done unpack"
 pass "ublue's /etc/.linuxbrew marker is cleared too"
@@ -273,7 +371,7 @@ pass "the failure names the unpack"
 grep -q "brew bundle failed" "$test_tmp/out.log" &&
   fail "a missing brew never reaches brew bundle" "$(cat "$test_tmp/out.log")"
 pass "a missing brew never reaches brew bundle"
-[[ ! -f $stamp ]] || fail "a missing brew leaves no stamp, so it retries next boot"
+[[ ! -f $stamp ]] || fail "a missing brew leaves no stamp, so the timer retries it"
 pass "a missing brew leaves no stamp"
 
 # --- 6) idempotence -----------------------------------------------------------------------------

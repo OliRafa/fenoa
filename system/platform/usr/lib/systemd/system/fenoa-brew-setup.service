@@ -3,19 +3,46 @@ Description=Apply the Fenoa Brewfile (first boot)
 # Homebrew ships prebuilt in the image; ublue's brew-setup.service unpacks it into /home/linuxbrew.
 # This only re-owns that prefix to the detected primary user and applies our Brewfile, so it must
 # run after both the unpack and the account creation. Ordering only — if either has not happened
-# the helper says so and retries next boot, rather than being silently skipped by a Requires=.
+# the helper says so and a later run retries, rather than being silently skipped by a Requires=.
+# The ordering holds for a start from the timer too: while fenoa-firstboot-user waits at its tty1
+# prompt, this start job waits behind it.
+#
+# Wants= as well, so every try (a timer start or a restart) queues the unpack again first. Once it
+# has run, its ConditionPathExists=! guards skip it at once; if the helper has just cleared an empty
+# prefix and ublue's marker, the next try unpacks Homebrew in this boot instead of the next one.
+Wants=brew-setup.service
 After=brew-setup.service
 After=fenoa-firstboot-user.service
-After=network-online.target
-Wants=network-online.target
-# Retries each boot until a primary user exists and the bundle succeeds.
+# No [Install] section: fenoa-brew-setup.timer starts this 30s after boot, then 2 minutes after each
+# run its condition skipped, until the network is up.
 
 [Service]
 Type=oneshot
+# A run that succeeds stays active, which is what stops the timer from starting it again this boot.
 RemainAfterExit=yes
+# Wait for the network here rather than at network-online.target, which the image's masked
+# NetworkManager-wait-online makes a no-op: offline `brew bundle` fails, and on a fresh install
+# Wi-Fi is not configured until the user sets it up in the session. Once the Brewfile has been
+# applied (the helper's stamp) pass at once, so a provisioned machine makes one instant no-op run
+# per boot and the timer stops; until then run only when Homebrew's API and bottle hosts answer over
+# HTTPS (fenoa-online). Never a ConditionPathExists=! on the stamp instead: a unit skipped by
+# Condition*= makes the timer start it again every 2 minutes for the rest of the boot.
+ExecCondition=/usr/bin/bash -c '[[ -f /var/lib/fenoa/brew-setup-done ]] || exec /usr/libexec/fenoa-online formulae.brew.sh ghcr.io'
+# A `brew bundle` that fails with the network up (a formula that does not build, a download that
+# broke off) is retried after a growing delay, 5 minutes up to 2 hours over five tries, not every 2
+# minutes for the rest of the boot: some aarch64 formulae build from source. A skip by the condition
+# above is not a failure, so it never restarts; the timer covers that.
+#
+# RestartMode=direct keeps the unit "activating" between tries. Without it each failure leaves the
+# unit inactive for an instant, the timer's OnUnitInactiveSec= arms, and 2 minutes later its start
+# cuts the delay short and resets the backoff (seen on systemd 259). The price: while it retries the
+# unit never shows as failed, even when the failure is a broken condition (fenoa-online exits 255,
+# which counts as a failure too); each failed try is in the journal.
+Restart=on-failure
+RestartMode=direct
+RestartSec=5min
+RestartSteps=5
+RestartMaxDelaySec=2h
 # brew bundle can take a while on first boot (some aarch64 formulae build from source).
 TimeoutStartSec=infinity
 ExecStart=/usr/libexec/fenoa-brew-setup
-
-[Install]
-WantedBy=multi-user.target

@@ -60,7 +60,7 @@ if [[ ! -x $BREW && -d $PREFIX ]]; then
   # Only a prefix with no bin/brew entry at all and no Homebrew/ is unambiguously an empty debris
   # directory.
   if [[ ! -e $PREFIX/bin/brew && ! -L $PREFIX/bin/brew && ! -d $PREFIX/Homebrew ]]; then
-    echo "brew-setup: $PREFIX exists but holds no Homebrew — clearing it so brew-setup.service can unpack"
+    echo "brew-setup: $PREFIX exists but holds no Homebrew — clearing it so brew-setup.service can unpack on the next try"
     rm -rf "$PREFIX"
     rmdir "$(dirname "$PREFIX")" 2>/dev/null || true
     rm -f "$BREW_MARKER"
@@ -68,7 +68,8 @@ if [[ ! -x $BREW && -d $PREFIX ]]; then
 fi
 
 # The image ships Homebrew; if it is not unpacked, ublue's brew-setup.service has not run or has
-# failed. Say so, rather than blaming the bundle two commands later, and retry next boot.
+# failed. Say so, rather than blaming the bundle two commands later, and fail: the unit restarts
+# after its delay, queueing brew-setup.service again first (Wants=).
 if [[ ! -x $BREW ]]; then
   echo "brew-setup: $BREW is missing — brew-setup.service has not unpacked /usr/share/homebrew.tar.zst." >&2
   echo "brew-setup: check it with: systemctl status brew-setup.service" >&2

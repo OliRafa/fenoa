@@ -21,13 +21,14 @@ disable sshd.service
 disable systemd-homed-firstboot.service
 
 # The m1n1 refresh and first-boot provisioning (P6-P8). Without these lines a first boot would
-# disable the unit that creates the user account. fenoa-flatpak-preinstall.service has no [Install]
-# section (its timer starts it), so a preset pass leaves it alone and only the timer is listed.
+# disable the unit that creates the user account. fenoa-flatpak-preinstall.service and
+# fenoa-brew-setup.service have no [Install] section (their timers start them), so a preset pass
+# leaves them alone and only the timers are listed.
 enable fenoa-apply-m1n1.service
 enable fenoa-firstboot-user.service
 enable fenoa-flatpak-preinstall.timer
 enable fenoa-flatpak-update.timer
-enable fenoa-brew-setup.service
+enable fenoa-brew-setup.timer
 enable brew-setup.service
 enable brew-update.timer
 enable brew-upgrade.timer

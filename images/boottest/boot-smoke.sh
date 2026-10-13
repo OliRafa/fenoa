@@ -98,13 +98,16 @@ else
   no "machine ID not committed (id '${machine_id:-empty}', overmount '${id_overmount:-none}', commit unit '${id_commit:-?}')"
 fi
 [[ -f /var/lib/fenoa/firstboot-user.done ]] && ok "primary user provisioned" || no "fenoa-firstboot-user has not completed"
-# The Flatpak preinstall is started by its timer (30s after boot, then every 2 minutes until the
-# remotes answer), so 20s after multi-user.target the set is often not installed yet.
-systemctl is-enabled --quiet fenoa-flatpak-preinstall.timer && ok "fenoa-flatpak-preinstall.timer enabled" \
-  || no "fenoa-flatpak-preinstall.timer not enabled — the Flatpak app set would never install"
+# The Flatpak preinstall and the Brewfile setup are started by their timers (30s after boot, then
+# every 2 minutes until the hosts they need answer), so 20s after multi-user.target they are often
+# not done yet.
+for t in fenoa-flatpak-preinstall fenoa-brew-setup; do
+  systemctl is-enabled --quiet "$t.timer" && ok "$t.timer enabled" || no "$t.timer not enabled — $t would never run"
+done
 systemctl is-active --quiet fenoa-flatpak-preinstall.service && ok "Flatpak app set installed" \
   || note "fenoa-flatpak-preinstall not done yet (its timer tries every 2 min until the remotes answer)"
-[[ -f /var/lib/fenoa/brew-setup-done ]] && ok "Brewfile applied" || note "fenoa-brew-setup not finished yet (needs network)"
+[[ -f /var/lib/fenoa/brew-setup-done ]] && ok "Brewfile applied" \
+  || note "fenoa-brew-setup not done yet (tried every 2 min until Homebrew answers; a failed bundle backs off)"
 
 echo "== immutability =="
 [[ -L /usr/local ]] && ok "/usr/local is a symlink" || no "/usr/local is not a symlink"

@@ -1,9 +1,10 @@
 # Fenoa — CLI / developer tools delivered via Homebrew (Linuxbrew)
 #
-# Installed into the user-writable brew prefix (/home/linuxbrew/.linuxbrew) on first boot by
-# fenoa-brew-setup.service, NOT baked into the immutable image. The base image ships Homebrew itself
-# prebuilt (ublue's brew image) and puts its shellenv on PATH via /etc/profile.d/brew.sh, and
-# brew-update.timer / brew-upgrade.timer keep everything here current after first boot.
+# Installed into the user-writable brew prefix (/home/linuxbrew/.linuxbrew) on first boot, once the
+# network is up, by fenoa-brew-setup.service, NOT baked into the immutable image. The base image
+# ships Homebrew itself prebuilt (ublue's brew image) and puts its shellenv on PATH via
+# /etc/profile.d/brew.sh, and brew-update.timer / brew-upgrade.timer keep everything here current
+# after first boot.
 #
 # Rule of thumb: tools with their own release cadence (editors, language toolchains, dev CLIs)
 # live here; anything the desktop or a system service needs at boot lives in the image.

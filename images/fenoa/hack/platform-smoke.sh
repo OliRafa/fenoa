@@ -143,6 +143,7 @@ case $help in *preinstall*) ok "flatpak preinstall CLI available" ;; *) no "flat
 # The preinstall waits for the network itself: fenoa-online skips it until the remotes answer over
 # HTTPS, and its timer starts it again until it has run. Started at boot instead (multi-user.target),
 # it would run before Wi-Fi is up, and offline `flatpak preinstall` exits 0 having installed nothing.
+# fenoa-brew-setup (below) works the same way.
 [[ -x /usr/libexec/fenoa-online ]] && ok "fenoa-online (the provisioning units' network check)" || no "fenoa-online missing or not executable"
 # fenoa-online asks each host over HTTPS with curl; without it every provisioning unit fails.
 command -v curl >/dev/null 2>&1 && ok "curl (fenoa-online's HTTPS check)" || no "curl missing — fenoa-online cannot check the network"
@@ -162,9 +163,13 @@ echo "== Homebrew ships prebuilt (ublue brew image) =="
 [[ -s /usr/share/homebrew.tar.zst ]] && ok "homebrew.tar.zst shipped" || no "homebrew.tar.zst missing"
 [[ -f /usr/share/fenoa/Brewfile ]] && ok "/usr/share/fenoa/Brewfile" || no "Brewfile missing"
 [[ -L /etc/systemd/system/multi-user.target.wants/brew-setup.service ]] && ok "brew-setup.service enabled" || no "brew-setup.service not enabled"
-[[ -L /etc/systemd/system/multi-user.target.wants/fenoa-brew-setup.service ]] \
-  && ok "fenoa-brew-setup.service enabled" || no "fenoa-brew-setup.service not enabled"
-for t in brew-update brew-upgrade; do
+# Like the Flatpak preinstall: started by its timer, and skipped until Homebrew's hosts answer
+# unless the Brewfile has already been applied.
+timer_only fenoa-brew-setup.service
+unit="$(cat /usr/lib/systemd/system/fenoa-brew-setup.service 2>/dev/null || true)"
+case $unit in *"/usr/libexec/fenoa-online formulae.brew.sh ghcr.io"*) ok "fenoa-brew-setup waits until Homebrew's hosts answer" ;; *) no "fenoa-brew-setup has no fenoa-online condition (brew bundle would run offline)" ;; esac
+case $unit in *"Restart=on-failure"*"RestartMode=direct"*) ok "fenoa-brew-setup backs off a failed brew bundle" ;; *) no "fenoa-brew-setup does not back off failures (it would rebuild every 2 minutes)" ;; esac
+for t in fenoa-brew-setup brew-update brew-upgrade; do
   [[ -L /etc/systemd/system/timers.target.wants/$t.timer ]] && ok "$t.timer enabled" || no "$t.timer not enabled"
 done
 helper="$(grep -vE '^[[:space:]]*#' /usr/libexec/fenoa-brew-setup 2>/dev/null || true)"
