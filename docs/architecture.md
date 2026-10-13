@@ -19,7 +19,7 @@ The split follows one rule: the **platform** stage holds everything a non-graphi
 
 | Step | What | Why |
 |---|---|---|
-| P1 | `packages/platform.packages` | system services, Asahi extras (tiny-dfr, widevine-installer, Honeykrisp: already in the base, listed so they stay), Docker, base CLI |
+| P1 | `packages/platform.packages` | system services, Asahi extras (tiny-dfr, widevine-installer, Honeykrisp: already in the base, listed so they stay), Docker, base CLI, zsh (new accounts' login shell) |
 | P2 | remove Firefox | the browser is a Flatpak |
 | P3 | systemd-boot; drop rpm-ostree/bootupd/GRUB; mask grub boot-success units | composefs + systemd-boot install; see [asahi.md](asahi.md) |
 | P4 | `COPY system/platform/ /` | units, helpers, tuning drop-ins, Apple HID modprobe/dracut config |
@@ -83,7 +83,7 @@ Each `hyprctl reload` runs the config in a fresh Lua state, so `require` loads t
 ```
 m1n1 → U-Boot → systemd-boot → kernel + initramfs (bootc composefs pivot, hid_apple loaded)
   → first boot only (/etc/machine-id ships "uninitialized"): full preset pass, then on tty1
-      systemd-firstboot (locale, keymap, timezone) and fenoa-firstboot-user (the account)
+      systemd-firstboot (locale, keymap, timezone) and fenoa-firstboot-user (the account, zsh as its shell)
   → greetd → fenoa-greeter-session (XKB_DEFAULT_* from fenoa/keyboard.lua) → noctalia-greeter-session
       (bundled wlroots compositor) → PAM (/etc/pam.d/greetd, keyring unlock)
   → uwsm start hyprland.desktop → Hyprland → uwsm-app noctalia

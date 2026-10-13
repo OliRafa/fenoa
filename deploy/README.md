@@ -252,7 +252,7 @@ log in.
 So the image creates the primary user **once, on first boot**, before the display manager:
 
 - **`systemd-firstboot`** — locale, keymap and timezone, on tty1. It runs because the image ships `/etc/machine-id` as `uninitialized`, which systemd counts as a first boot (an empty file would not). It prompts for neither the hostname (set one with `hostnamectl hostname <name>`) nor a root password: the image already has a locked root entry, which systemd-firstboot treats as configured, and the user created next is in `wheel`. For an unattended first boot it reads the `firstboot.locale`, `firstboot.keymap` and `firstboot.timezone` credentials instead of prompting (for example `systemd.set_credential=firstboot.keymap:de` on the kernel command line; see systemd-firstboot(1)).
-- **`fenoa-firstboot-user.service`** — the human account (added to `wheel` ⇒ sudo). Two modes:
+- **`fenoa-firstboot-user.service`** — the human account (added to `wheel` ⇒ sudo), with zsh as its login shell and Fedora's stock zsh config from `/etc/skel` (bash if zsh is missing). Two modes:
   - **Interactive** (default): prompts on tty1 for username / full name / password.
   - **Preseed**: if `/etc/fenoa/firstboot-user.conf` exists it's read non-interactively, then
     shredded (it may hold a secret). Keys:

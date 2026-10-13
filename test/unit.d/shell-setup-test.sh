@@ -39,6 +39,12 @@ out=$(env -i HOME="$test_tmp" TERM=xterm PATH="$test_tmp/bin" /bin/bash -c "$pro
 [[ $out != *_loaded* && $out != *"alias ls="* ]] || fail "non-interactive shells are left alone" "$out"
 pass "non-interactive shells are left alone"
 
+# Fedora's /etc/zshrc sources profile.d too; zsh (new accounts' login shell) keeps its stock config.
+# Stood in for by a bash without BASH_VERSION, which is all the guard looks at.
+out=$(env -i HOME="$test_tmp" TERM=xterm PATH="$test_tmp/bin" /bin/bash -ic "unset BASH_VERSION; $probe" _ "$setup" 2>/dev/null)
+[[ $out != *_loaded* && $out != *"alias ls="* && $out != *"alias cd="* ]] || fail "a shell that is not bash (zsh) is left alone" "$out"
+pass "a shell that is not bash (zsh sourcing profile.d) is left alone"
+
 out=$(env -i HOME="$test_tmp" TERM=xterm FENOA_SHELL_SETUP=0 PATH="$test_tmp/bin" /bin/bash -ic "$probe" _ "$setup" 2>/dev/null)
 [[ $out != *_loaded* && $out != *"alias ls="* ]] || fail "FENOA_SHELL_SETUP=0 opts out" "$out"
 pass "FENOA_SHELL_SETUP=0 opts out"

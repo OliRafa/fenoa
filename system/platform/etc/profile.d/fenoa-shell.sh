@@ -4,6 +4,8 @@
 # profile.d for interactive shells, and brew.sh (which puts Homebrew on PATH) sorts before this file.
 # Opt out per user with `export FENOA_SHELL_SETUP=0` in ~/.bashrc before /etc/bashrc is sourced.
 
+# Bash only. Fedora's /etc/zshrc sources profile.d as well (under `emulate -L ksh`), and zsh, the
+# login shell of new accounts, deliberately keeps Fedora's stock config.
 [ -n "${BASH_VERSION:-}" ] || return 0
 case $- in *i*) ;; *) return 0 ;; esac
 [ "${FENOA_SHELL_SETUP:-1}" = 0 ] && return 0

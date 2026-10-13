@@ -20,6 +20,9 @@
 # Before creating the user: if /etc/vconsole.conf carries a console KEYMAP with no XKB settings,
 # one systemd-firstboot did not convert, it adds the XKB layout known for that keymap, so the login
 # screen and the desktop use the layout the password is typed in.
+#
+# The account's login shell is zsh, with nothing but Fedora's stock config: the zsh package ships
+# /etc/skel/.zshrc and /etc/skel/.zprofile, which useradd -m copies into the new home.
 set -uo pipefail
 
 log() { printf 'firstboot-user: %s\n' "$1"; }
@@ -31,6 +34,7 @@ marker="${FENOA_FIRSTBOOT_MARKER:-/var/lib/fenoa/firstboot-user.done}"
 login_defs="${FENOA_LOGIN_DEFS:-/etc/login.defs}"
 vconsole="${FENOA_VCONSOLE_CONF:-/etc/vconsole.conf}"
 kbd_model_map="${FENOA_KBD_MODEL_MAP:-/usr/share/systemd/kbd-model-map}"
+login_shell="${FENOA_FIRSTBOOT_SHELL:-/usr/bin/zsh}"
 
 # The unit is gated on this marker (ConditionPathExists=!...), NOT on systemd's ConditionFirstBoot —
 # see fenoa-firstboot-user.service for why that gate silently skipped. Write it only once a human
@@ -165,8 +169,15 @@ if [[ -z $USERNAME ]]; then
   exit 1
 fi
 
+# A build without zsh (zsh is in packages/platform.packages) must not create an account whose
+# shell does not exist: nothing could log in to it.
+if [[ ! -x $login_shell ]]; then
+  log "$login_shell is not executable — giving '$USERNAME' /bin/bash instead" >&2
+  login_shell=/bin/bash
+fi
+
 # Create the account (home under /var/home via the /home symlink on bootc).
-useradd -m -c "$FULLNAME" -s /bin/bash "$USERNAME" || { log "useradd failed" >&2; exit 1; }
+useradd -m -c "$FULLNAME" -s "$login_shell" "$USERNAME" || { log "useradd failed" >&2; exit 1; }
 
 # Supplementary groups (wheel ⇒ sudo on Fedora). Only add groups that exist.
 for g in $GROUPS_EXTRA; do
@@ -183,7 +194,7 @@ else
   passwd -l "$USERNAME" >/dev/null 2>&1 || true
 fi
 
-log "created '$USERNAME' (groups: ${GROUPS_EXTRA:-none})"
+log "created '$USERNAME' (groups: ${GROUPS_EXTRA:-none}; shell: $login_shell)"
 mark_done
 
 # The preseed may hold a plaintext password — scrub it now that the user exists.

@@ -2,9 +2,9 @@
 # e2e test of Fenoa's FIRST-BOOT user setup against a built image (container; no boot).
 #
 # Covers the boot-time half of first boot: fenoa-firstboot-user creating the primary user from a
-# preseed, the marker gating, preseed scrubbing and idempotence, and — on the desktop image —
-# /etc/skel seeding the new home with the Hyprland/Noctalia config. Also validates the shipped units
-# with systemd-analyze.
+# preseed (zsh as its login shell, Fedora's stock ~/.zshrc seeded from /etc/skel), the marker
+# gating, preseed scrubbing and idempotence, and — on the desktop image — /etc/skel seeding the new
+# home with the Hyprland/Noctalia config. Also validates the shipped units with systemd-analyze.
 #
 # The unit's GATING is covered in A0/A: it gates on its own marker, not ConditionFirstBoot. The image
 # ships /etc/machine-id as "uninitialized", so systemd does detect an install's first boot, but it
@@ -72,6 +72,9 @@ pstatus="$(passwd -S "$U" 2>/dev/null | awk '{print $2}')"
 home="$(getent passwd "$U" | cut -d: -f6)"
 note "home = $home"
 [[ -d $home ]] && ok "home dir exists" || no "home dir missing"
+login_shell="$(getent passwd "$U" | cut -d: -f7)"
+[[ $login_shell == "/usr/bin/zsh" ]] && ok "login shell is /usr/bin/zsh" || no "login shell is '${login_shell:-?}', not /usr/bin/zsh"
+[[ -f $home/.zshrc ]] && ok "~/.zshrc seeded from /etc/skel (Fedora's stock config)" || no "~/.zshrc missing — skel not seeded"
 
 if [[ $DESKTOP == "1" ]]; then
   echo "== B) /etc/skel seeded the desktop config into the new home =="

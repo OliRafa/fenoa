@@ -97,6 +97,14 @@ if getent passwd | awk -F: '$3>=1000 && $3<60000 {f=1} END{exit !f}'; then
 else
   ok "no human user baked in"
 fi
+# New accounts log in to zsh with Fedora's stock config: the package's %post lists it in
+# /etc/shells (chsh refuses a shell that is not there) and it ships the skel files useradd copies.
+rpm -q zsh >/dev/null 2>&1 && ok "zsh installed (new accounts' login shell)" || no "zsh missing (fenoa-firstboot-user would fall back to bash)"
+shells="$(cat /etc/shells 2>/dev/null || true)"
+[[ $'\n'$shells$'\n' == *$'\n'/usr/bin/zsh$'\n'* ]] && ok "/usr/bin/zsh is listed in /etc/shells" || no "/usr/bin/zsh is not in /etc/shells"
+for f in /etc/skel/.zshrc /etc/skel/.zprofile; do
+  [[ -f $f ]] && ok "$f (Fedora's stock zsh config for new homes)" || no "$f missing"
+done
 # systemd counts a boot as the first only when /etc/machine-id is absent or reads "uninitialized"
 # (an empty file does not count); only then does systemd-firstboot run and the preset pass apply.
 machine_id="$(cat /etc/machine-id 2>/dev/null || true)"

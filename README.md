@@ -43,11 +43,13 @@ sudo reboot
 This is the first boot of a fresh install (`deploy/fenoa-install`, or any `bootc install`). A `bootc switch` from an existing system keeps its machine ID and its user, so neither prompt below appears.
 
 1. `systemd-firstboot` asks on tty1 for the locale, the keymap and the timezone. It asks for no hostname (set one later with `hostnamectl hostname <name>`) and no root password: root stays locked, and the user you create next gets `sudo`. The login screen and Hyprland follow the keymap you pick.
-2. `fenoa-firstboot-user` asks for your username, full name and password on tty1 (or reads a preseed from `/etc/fenoa/firstboot-user.conf`).
+2. `fenoa-firstboot-user` asks for your username, full name and password on tty1 (or reads a preseed from `/etc/fenoa/firstboot-user.conf`). The account's login shell is zsh, with Fedora's stock configuration (the `~/.zshrc` and `~/.zprofile` the zsh package puts in `/etc/skel`).
 3. The greeter comes up; log in to the **Hyprland (uwsm-managed)** session. Noctalia's setup wizard takes it from there.
 4. In the background the Flatpak apps and the Brewfile install once the network is up. A reboot or two later, `fenoa-apply-m1n1` has refreshed m1n1 and the devicetree for the installed kernel.
 
 Then, for DRM video in Brave: open Brave once, and run `fenoa-widevine`.
+
+Fenoa's shell setup for the Brewfile's tools (the starship prompt, zoxide, fzf and eza) is wired into bash only, by `/etc/profile.d/fenoa-shell.sh`; zsh gets none of it. Accounts that already existed keep their login shell, including one carried over by a `bootc switch`: `chsh -s /usr/bin/zsh` switches to zsh, `chsh -s /bin/bash` back.
 
 ## Use
 

@@ -69,6 +69,7 @@ terminus-fonts-console
 sudo
 less
 man-db
+zsh                         # new accounts' login shell (fenoa-firstboot-user), Fedora's stock config
 vim-minimal                 # provides `vi` for $EDITOR fallbacks
 unzip
 wget2-wget

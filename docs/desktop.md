@@ -24,7 +24,8 @@ Fenoa's session is Hyprland (Lua config) managed by uwsm, with Noctalia v5 as th
 | Screen recording / streaming | OBS Studio (Fedora's Flatpak), wf-recorder | Flathub's OBS has no aarch64 build; it comes from the `fedora` remote, which sits below Flathub so it supplies nothing else. `wf-recorder -f out.mp4` records from a terminal (gpu-screen-recorder does not work on the Asahi GPU) |
 | Media | mpv + mpv-mpris | Noctalia's media controls see it over MPRIS |
 | Font | Source Code Pro | the system `monospace` (`/etc/fonts/conf.d/50-fenoa-monospace.conf`), used by foot, Noctalia and the greeter; Cascadia Mono NF supplies Nerd Font icons as a fallback |
-| Shell tools | starship, zoxide, fzf, eza, bat, ripgrep, fd, lazygit, btop (Homebrew) | wired into interactive bash by `/etc/profile.d/fenoa-shell.sh` once installed: starship prompt, `cd` falls back to zoxide, fzf on Ctrl+R/Ctrl+T/Alt+C, `ls`/`lt` via eza, `ff` fuzzy file preview; opt out with `FENOA_SHELL_SETUP=0` |
+| Login shell | zsh (accounts created by `fenoa-firstboot-user`) | Fedora's stock config only (`~/.zshrc` and `~/.zprofile` from `/etc/skel`); the shell tools below are set up in bash, not zsh. `chsh -s /bin/bash` makes bash the login shell |
+| Shell tools | starship, zoxide, fzf, eza, bat, ripgrep, fd, lazygit, btop (Homebrew) | wired into interactive bash (only) by `/etc/profile.d/fenoa-shell.sh` once installed: starship prompt, `cd` falls back to zoxide, fzf on Ctrl+R/Ctrl+T/Alt+C, `ls`/`lt` via eza, `ff` fuzzy file preview; opt out with `FENOA_SHELL_SETUP=0` |
 
 ## Key bindings
 

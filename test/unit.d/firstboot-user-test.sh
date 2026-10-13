@@ -50,6 +50,14 @@ grep -q '^TTYPath=/dev/tty1' "$unit" || fail "interactive prompt is bound to tty
 grep -q '^StandardInput=tty-force' "$unit" || fail "interactive prompt can read from tty1"
 pass "interactive prompt is bound to tty1"
 
+# New accounts log in to zsh. The tests below point FENOA_FIRSTBOOT_SHELL at a stand-in, so pin the
+# real default here, and that the image installs it (else every account falls back to bash).
+helper_shell=$(sed -n 's/^login_shell="\${FENOA_FIRSTBOOT_SHELL:-\(.*\)}"$/\1/p' "$helper")
+[[ $helper_shell == "/usr/bin/zsh" ]] || fail "the helper's default login shell is /usr/bin/zsh" "got: ${helper_shell:-<unparsed>}"
+sed 's/#.*//' "$ROOT/packages/platform.packages" | awk 'NF { print $1 }' | grep -qx zsh ||
+  fail "packages/platform.packages installs zsh"
+pass "new accounts default to /usr/bin/zsh, which the platform stage installs"
+
 # --- helper behaviour -------------------------------------------------------------------------
 
 test_tmp=$(mktemp -d)
@@ -96,6 +104,10 @@ SH
 chmod +x "$mock_bin"/*
 
 conf="$test_tmp/firstboot-user.conf"
+# Stands in for /usr/bin/zsh, which the host running the tests may not have.
+zsh="$test_tmp/zsh"
+printf '#!/bin/bash\n' >"$zsh"
+chmod +x "$zsh"
 marker="$test_tmp/state/firstboot-user.done"
 mock_log="$test_tmp/mock.log"
 vconsole="$test_tmp/vconsole.conf"   # absent unless a test writes it; never the host's
@@ -121,7 +133,7 @@ run_helper() {
   env PATH="$mock_bin:$PATH" MOCK_LOG="$mock_log" \
     FENOA_FIRSTBOOT_CONF="$conf" FENOA_FIRSTBOOT_MARKER="$marker" \
     FENOA_VCONSOLE_CONF="$vconsole" FENOA_KBD_MODEL_MAP="$kbd_model_map" \
-    "$@" bash "$helper" >"$test_tmp/out.log" 2>&1
+    FENOA_FIRSTBOOT_SHELL="${FENOA_FIRSTBOOT_SHELL:-$zsh}" "$@" bash "$helper" >"$test_tmp/out.log" 2>&1
 }
 
 # 1) No human user + preseed: provisions and marks done.
@@ -133,6 +145,18 @@ pass "preseed run creates the account"
 pass "preseed run writes the done marker"
 [[ ! -e $conf ]] || fail "preseed holding a password is scrubbed after use"
 pass "preseed is scrubbed after use"
+grep -qF -- "-s $zsh tester" "$mock_log" || fail "the account's login shell is zsh" "$(cat "$mock_log")"
+pass "the account's login shell is zsh"
+
+# 1b) zsh missing (a stripped or test build): bash, never a shell that does not exist.
+: >"$mock_log"; rm -f "$marker"; write_preseed
+FENOA_FIRSTBOOT_SHELL="$test_tmp/no-such-zsh" run_helper ||
+  fail "a run without zsh succeeds" "$(cat "$test_tmp/out.log")"
+grep -qF -- "-s /bin/bash tester" "$mock_log" || fail "without zsh the account gets /bin/bash" "$(cat "$mock_log")"
+grep -qF "no-such-zsh is not executable" "$test_tmp/out.log" ||
+  fail "the fallback to bash is logged" "$(cat "$test_tmp/out.log")"
+[[ -f $marker ]] || fail "a run that fell back to bash still marks done"
+pass "without zsh the account gets /bin/bash, and the fallback is logged"
 
 # 2) A human user already exists: no-op, but still marks done so the unit stops taking tty1.
 : >"$mock_log"; rm -f "$marker"
