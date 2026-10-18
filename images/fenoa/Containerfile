@@ -289,6 +289,37 @@ RUN retry() { n=1; while ! "$@"; do [ "$n" -ge 5 ] && return 1; echo "[dnf-retry
  && dnf clean all \
  && rm -f /tmp/desktop.packages
 
+# D3b) The ai-usagebar CLI, which the AI Usage bar widget (Noctalia plugin felipeartur/ai-usagebar,
+#      enabled in /usr/share/fenoa/noctalia/fenoa.toml) runs as `ai-usagebar usage --json`. The CLI is
+#      a separate project (akitaonrails/ai-usagebar) in neither Fedora nor Homebrew, so it comes from
+#      its GitHub release: the latest one at build time, resolved once so all three files come from
+#      the same release, because Noctalia keeps the plugin itself updated and the weekly rebuild keeps
+#      the CLI in step with it. The signing key is fetched from that release, so trust rests on the
+#      pinned fingerprint (also published on keys.openpgp.org): the build fails unless the tarball
+#      carries a good signature from that key. gpgv needs a binary keyring; GNUPGHOME keeps gpg off
+#      /root, a dangling link during the build (see P5).
+ARG AI_USAGEBAR_KEY=AE42EF5D73DD92E248815C95B65CCCAF64A99438
+RUN set -eux; \
+    releases=https://github.com/akitaonrails/ai-usagebar/releases; \
+    latest="$(curl --retry 3 --retry-delay 2 -fsSLI -o /dev/null -w '%{url_effective}' "$releases/latest")"; \
+    tag="${latest##*/}"; \
+    case "$tag" in v[0-9]*) ;; *) echo "[D3b] no release tag in $latest"; exit 1 ;; esac; \
+    url="$releases/download/$tag"; \
+    tarball=ai-usagebar-linux-aarch64.tar.gz; \
+    tmp="$(mktemp -d)"; \
+    for f in "$tarball" "$tarball.sig" ai-usagebar-signing-key.asc; do \
+      curl --retry 3 --retry-delay 2 -fsSL -o "$tmp/$f" "$url/$f"; \
+    done; \
+    GNUPGHOME="$tmp" gpg --batch --dearmor -o "$tmp/key.gpg" "$tmp/ai-usagebar-signing-key.asc"; \
+    status="$(gpgv --status-fd 1 --keyring "$tmp/key.gpg" "$tmp/$tarball.sig" "$tmp/$tarball")"; \
+    echo "$status" | grep -qE "^\[GNUPG:\] VALIDSIG .* $AI_USAGEBAR_KEY\$" \
+      || { echo "[D3b] $tarball is not signed by $AI_USAGEBAR_KEY"; exit 1; }; \
+    tar -xzf "$tmp/$tarball" -C "$tmp" ./ai-usagebar ./LICENSE; \
+    install -Dm0755 "$tmp/ai-usagebar" /usr/bin/ai-usagebar; \
+    install -Dm0644 "$tmp/LICENSE" /usr/share/licenses/ai-usagebar/LICENSE; \
+    rm -rf "$tmp"; \
+    ai-usagebar --version
+
 # D4) The desktop overlay: Hyprland defaults (/usr/share/fenoa/hypr) and Noctalia defaults
 #     (/usr/share/fenoa/noctalia) that the thin user configs in /etc/skel pull in; greetd + greeter
 #     config, its state-directory tmpfiles entry and SELinux label; the greeter-sync polkit rule; session

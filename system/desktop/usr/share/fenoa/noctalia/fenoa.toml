@@ -20,6 +20,24 @@ launch_apps_custom_command = "uwsm-app -- $CMD"
 # (usr/share/polkit-1/rules.d/49-fenoa-greeter-sync.rules), everyone else gets an admin prompt.
 auto_sync = true
 
+[plugins]
+# Noctalia fetches these from its community source and keeps them updated, unpinned. The plugin
+# code runs as the user (AI Usage's CLI reads the Claude/Codex/Copilot logins), so the community
+# repository and each plugin's author are a trust dependency, like the Containerfile's brew image.
+# - AI Usage: AI plan usage (Claude, Codex, Copilot, ...) and quota resets. The ai-usagebar CLI it
+#   runs is in the image (Containerfile D3b). It reuses each vendor's own CLI login (run `claude` or
+#   `codex login` once); API keys and opt-in vendors go in ~/.config/ai-usagebar/config.toml.
+enabled = ["felipeartur/ai-usagebar"]
+
+[widget.ai_usage]
+type = "felipeartur/ai-usagebar:bar"
+
+[bar.default]
+# Noctalia's default right-hand side, with the plugin widgets in front. Setting the list replaces the
+# default whole, so a widget Noctalia adds to its own default later does not appear here.
+end = ["ai_usage", "media", "tray", "notifications", "clipboard", "network", "bluetooth", "volume",
+       "brightness", "battery", "control-center", "session"]
+
 [theme.templates]
 # Re-colour GTK apps (adw-gtk3), foot and Hyprland's borders from the current palette.
 enable_builtin_templates = true

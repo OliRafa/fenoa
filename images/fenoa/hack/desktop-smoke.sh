@@ -104,11 +104,17 @@ mkdir -p "$home/.run" && chmod 0700 "$home/.run"
 [[ -f $home/.config/noctalia/config.toml ]] && ok "skel seeds ~/.config/noctalia/config.toml" || no "skel has no noctalia config"
 
 validate="$(HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_STATE_HOME="$home/.local/state" noctalia config validate 2>&1 || true)"
-case $validate in
-  *"warning"*|*"WARN"*|*"ERR"*) no "noctalia config validate reports problems: $validate" ;;
-  *"Config is valid"*) ok "noctalia config validate: valid, no warnings" ;;
-  *) no "noctalia config validate: $validate" ;;
-esac
+# A plugin's widget types are known only once Noctalia has fetched the plugin, which it does at
+# login, so the offline validator flags plugin widgets ("<author>/<plugin>:<entry>"); any other
+# warning is a problem. desktop-config-test.sh checks each of them belongs to an enabled plugin.
+problems="$(printf '%s\n' "$validate" | grep -E 'WARN|ERR' | grep -vE 'unrecognized widget type "[^"/]+/[^"/:]+:[^"]+"$' || true)"
+if [[ -n $problems ]]; then
+  no "noctalia config validate reports problems: $problems"
+elif [[ $validate == *"Config is valid"* ]]; then
+  ok "noctalia config validate: valid, no warnings beyond the plugin widgets"
+else
+  no "noctalia config validate: $validate"
+fi
 exported="$(HOME="$home" XDG_CONFIG_HOME="$home/.config" noctalia config export 2>/dev/null || true)"
 case $exported in *'polkit_agent = true'*) ok "the image defaults are included (polkit agent on)" ;; *) no "the include of /usr/share/fenoa/noctalia/fenoa.toml did not apply" ;; esac
 
@@ -126,6 +132,19 @@ echo "== session plumbing and defaults =="
 for c in fenoa-kbd-backlight fenoa-hypr-clamshell; do
   [[ -x /usr/bin/$c ]] && ok "$c" || no "$c missing"
 done
+# The AI Usage widget runs `ai-usagebar usage --json`; with no vendor logins it still reports (errors).
+aub_version="$(ai-usagebar --version 2>&1 || true)"
+aub_home="$(mktemp -d)"
+aub_usage="$(HOME="$aub_home" timeout 30 ai-usagebar usage --json 2>&1 || true)"
+rm -rf "$aub_home"
+case $aub_version in
+  "ai-usagebar "[0-9]*) ok "ai-usagebar CLI for the AI Usage widget ($aub_version)" ;;
+  *) no "ai-usagebar CLI missing or broken: $aub_version" ;;
+esac
+case $aub_usage in
+  *'"schema_version"'*) ok "ai-usagebar usage --json reports without any vendor login" ;;
+  *) no "ai-usagebar usage --json: $aub_usage" ;;
+esac
 sh -n /usr/share/uwsm/env.d/10-fenoa 2>/dev/null && ok "uwsm env.d/10-fenoa parses" || no "uwsm env.d/10-fenoa missing or invalid"
 [[ "$(cat /etc/xdg/hyprland-xdg-terminals.list 2>/dev/null)" == "foot.desktop" ]] && ok "default terminal: foot" || no "hyprland-xdg-terminals.list not foot"
 [[ -f /usr/share/applications/foot.desktop ]] && ok "foot.desktop exists" || no "foot.desktop missing"

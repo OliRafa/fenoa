@@ -51,6 +51,21 @@ pass "the seeded Noctalia config includes /usr/share/fenoa/noctalia/fenoa.toml"
   fail "the greeter follows the user's appearance (auto sync)"
 pass "Noctalia defaults: polkit agent, uwsm-launched apps, greeter auto sync"
 
+# A plugin widget shows only while its plugin is enabled, and AI Usage only draws what the
+# ai-usagebar CLI reports, which nothing but the image provides.
+[[ "$(toml "$noctalia_defaults" 'all(w["type"].split(":")[0] in t["plugins"]["enabled"]
+  for w in t["widget"].values() if "/" in w["type"])')" == "True" ]] ||
+  fail "every plugin widget in the defaults belongs to an enabled plugin"
+[[ "$(toml "$noctalia_defaults" 't["widget"]["ai_usage"]["type"]')" == "felipeartur/ai-usagebar:bar" ]] ||
+  fail "the ai_usage widget is the AI Usage plugin's bar widget"
+[[ "$(toml "$noctalia_defaults" '"ai_usage" in t["bar"]["default"]["end"]')" == "True" ]] ||
+  fail "the AI Usage widget is on the bar"
+grep -qF 'install -Dm0755 "$tmp/ai-usagebar" /usr/bin/ai-usagebar' "$containerfile" ||
+  fail "the Containerfile installs the ai-usagebar CLI the plugin runs"
+grep -qE '^ARG AI_USAGEBAR_KEY=[0-9A-F]{40}$' "$containerfile" ||
+  fail "the ai-usagebar release is checked against a pinned signing-key fingerprint"
+pass "the AI Usage plugin is enabled and on the bar, and the image carries its signed ai-usagebar CLI"
+
 # --- greetd ↔ tmpfiles ↔ greeter ------------------------------------------------------------------
 
 greeter_user=$(toml "$greetd" 't["default_session"]["user"]')
