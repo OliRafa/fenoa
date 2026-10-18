@@ -9,6 +9,9 @@
 #   desktop   FROM platform: Hyprland + Noctalia shell + noctalia-greeter (greetd). This is the
 #             published `fenoa` image. images/fairydust/Containerfile swaps its kernel.
 #
+# Two helper stages only supply files: `brew` (Universal Blue's prebuilt Homebrew tree, for platform)
+# and `librepods` (builds the AirPods plugin's daemon, for desktop).
+#
 # Build on a native aarch64 host (see images/build.sh):
 #   ./images/build.sh platform     # -> fenoa-platform:44 (local only)
 #   ./images/build.sh fenoa        # -> fenoa:44
@@ -29,6 +32,32 @@ ARG FEDORA=44
 # digest if that tradeoff ever needs tightening.
 ARG BREW_IMAGE=ghcr.io/ublue-os/brew:latest
 FROM ${BREW_IMAGE} AS brew
+
+# ==================================================================================================
+# librepods — build-only stage for the AirPods plugin's daemon; the desktop stage copies its output
+# ==================================================================================================
+# The AirPods plugin (harveywuk/airpods) drives a patched librepods (GPL-3.0): upstream
+# kavishdevar/librepods lacks the status file and control verbs it reads. No distribution packages
+# the fork, so it is built here from a pinned commit; git checks that the tree is that commit. Bump
+# LIBREPODS_COMMIT deliberately, after reading the diff: the daemon runs in every user's session with
+# Bluetooth access. Built on the same base and Fedora repos as the desktop stage, so it links the
+# Qt the image carries. /usr/share/licenses/librepods/SOURCE names the source of the GPL binary.
+FROM ${BASE}:${FEDORA} AS librepods
+ARG LIBREPODS_REPO=https://github.com/harveywuk/librepods
+ARG LIBREPODS_COMMIT=4ed49df0b301ac3e6fba9c81dfbbb6726cc52201
+RUN retry() { n=1; while ! "$@"; do [ "$n" -ge 5 ] && return 1; echo "[dnf-retry] attempt $n failed: $*"; dnf clean all || true; sleep $((n*5)); n=$((n+1)); done; }; \
+    retry dnf -y install git-core cmake ninja-build gcc-c++ pkgconf-pkg-config qt6-qtbase-devel \
+      qt6-qtdeclarative-devel qt6-qtconnectivity-devel qt6-qttools-devel openssl-devel pulseaudio-libs-devel
+RUN set -eux; \
+    git init -q /src; \
+    git -C /src fetch -q --depth 1 "$LIBREPODS_REPO" "$LIBREPODS_COMMIT"; \
+    git -C /src checkout -q FETCH_HEAD; \
+    [ "$(git -C /src rev-parse HEAD)" = "$LIBREPODS_COMMIT" ]; \
+    cmake -S /src -B /build -G Ninja -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr; \
+    cmake --build /build; \
+    DESTDIR=/out cmake --install /build; \
+    install -Dm0644 /src/LICENSE /out/usr/share/licenses/librepods/LICENSE; \
+    printf 'Built from %s at commit %s\n' "$LIBREPODS_REPO" "$LIBREPODS_COMMIT" >/out/usr/share/licenses/librepods/SOURCE
 
 # ==================================================================================================
 # platform
@@ -319,6 +348,28 @@ RUN set -eux; \
     install -Dm0644 "$tmp/LICENSE" /usr/share/licenses/ai-usagebar/LICENSE; \
     rm -rf "$tmp"; \
     ai-usagebar --version
+
+# D3c) The librepods daemon and librepods-ctl for the AirPods plugin (harveywuk/airpods), from the
+#      librepods build stage. The daemon runs headless as a user service bound to the graphical
+#      session (upstream's sandboxed unit, pointed at /usr/bin; the widget stays hidden until AirPods
+#      connect), and the plugin finds librepods-ctl on PATH. Its .desktop entry is left out: it starts
+#      the tray GUI, which with the daemon running only pings it and exits. The Qt it links is listed
+#      in desktop.packages; the build fails if either binary is missing a library.
+#      50-fenoa-desktop.preset under user-preset keeps the unit enabled through a preset pass.
+COPY --from=librepods /out/usr/bin/librepods /out/usr/bin/librepods-ctl /usr/bin/
+COPY --from=librepods /out/usr/share/openpods/ /usr/share/openpods/
+COPY --from=librepods /out/usr/share/licenses/librepods/ /usr/share/licenses/librepods/
+COPY --from=librepods /out/usr/share/systemd/user/librepods.service /usr/lib/systemd/user/librepods.service
+RUN set -eux; \
+    unit=/usr/lib/systemd/user/librepods.service; \
+    sed -i 's|^ExecStart=%h/\.local/bin/librepods |ExecStart=/usr/bin/librepods |' "$unit"; \
+    grep -qx 'ExecStart=/usr/bin/librepods --headless' "$unit" \
+      || { echo "[D3c] librepods.service does not run /usr/bin/librepods --headless"; exit 1; }; \
+    for b in librepods librepods-ctl; do \
+      missing="$(ldd "/usr/bin/$b" | grep 'not found' || true)"; \
+      [ -z "$missing" ] || { echo "[D3c] $b is missing libraries: $missing"; exit 1; }; \
+    done; \
+    systemctl --global enable librepods.service
 
 # D4) The desktop overlay: Hyprland defaults (/usr/share/fenoa/hypr) and Noctalia defaults
 #     (/usr/share/fenoa/noctalia) that the thin user configs in /etc/skel pull in; greetd + greeter

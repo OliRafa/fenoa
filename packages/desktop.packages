@@ -27,6 +27,9 @@ gnome-keyring               # unlocked at login by /etc/pam.d/greetd
 libsecret
 ddcutil                     # Noctalia: brightness on DDC/CI external monitors
 ffmpeg-free                 # ffplay, for the Pomodoro plugin's sounds (already in the base image)
+qt6-qtconnectivity          # Qt Bluetooth, Gui and Quick, which librepods links (the AirPods plugin's
+qt6-qtbase-gui              # daemon, Containerfile D3c); it is built in its own stage, so nothing
+qt6-qtdeclarative           # else pulls them in for it
 
 # --- Theming (Noctalia's gtk3/gtk4 templates target adw-gtk3) ---
 adw-gtk3-theme

@@ -1,0 +1,6 @@
+# User units the desktop stage enables for every user (`systemctl --global enable` in
+# images/fenoa/Containerfile). Fedora's 99-default-disable.preset disables every user unit no preset
+# lists, so a global preset pass would otherwise turn these off.
+
+# The AirPods plugin's daemon (Containerfile D3c)
+enable librepods.service

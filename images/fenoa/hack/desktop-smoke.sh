@@ -145,6 +145,24 @@ case $aub_usage in
   *'"schema_version"'*) ok "ai-usagebar usage --json reports without any vendor login" ;;
   *) no "ai-usagebar usage --json: $aub_usage" ;;
 esac
+# The AirPods widget drives the librepods daemon (a user service in every session) via librepods-ctl.
+for b in librepods librepods-ctl; do
+  libs="$(ldd "/usr/bin/$b" 2>&1 || true)"
+  if [[ ! -x /usr/bin/$b ]]; then
+    no "$b missing"
+  elif [[ $libs == *"not found"* ]]; then
+    no "$b is missing libraries: $(printf '%s\n' "$libs" | grep 'not found' | tr -s ' \t' ' ')"
+  else
+    ok "$b (every library resolves)"
+  fi
+done
+lp_unit="$(cat /usr/lib/systemd/user/librepods.service 2>/dev/null || true)"
+case $lp_unit in
+  *$'\n'"ExecStart=/usr/bin/librepods --headless"$'\n'*) ok "librepods.service runs /usr/bin/librepods --headless" ;;
+  *) no "librepods.service missing or not pointed at /usr/bin/librepods --headless" ;;
+esac
+[[ "$(systemctl --global is-enabled librepods.service 2>/dev/null)" == "enabled" ]] \
+  && ok "librepods.service is enabled for every user" || no "librepods.service is not enabled globally"
 sh -n /usr/share/uwsm/env.d/10-fenoa 2>/dev/null && ok "uwsm env.d/10-fenoa parses" || no "uwsm env.d/10-fenoa missing or invalid"
 [[ "$(cat /etc/xdg/hyprland-xdg-terminals.list 2>/dev/null)" == "foot.desktop" ]] && ok "default terminal: foot" || no "hyprland-xdg-terminals.list not foot"
 [[ -f /usr/share/applications/foot.desktop ]] && ok "foot.desktop exists" || no "foot.desktop missing"
@@ -189,6 +207,13 @@ dm="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || tru
 [[ $dm == */greetd.service && "$(systemctl get-default 2>/dev/null)" == "graphical.target" ]] \
   && ok "after the preset pass greetd is still the display manager, booting graphical.target" \
   || no "after the preset pass the display manager is '${dm:-unset}', default $(systemctl get-default 2>/dev/null)"
+# Fedora's user presets end in `disable *` too; ours must keep librepods if a global pass ever runs.
+if systemctl --global preset librepods.service >/dev/null 2>&1 \
+  && [[ "$(systemctl --global is-enabled librepods.service 2>/dev/null)" == "enabled" ]]; then
+  ok "a global preset pass keeps librepods.service enabled"
+else
+  no "a global preset pass disables librepods.service"
+fi
 
 echo
 if [[ $fail == "0" ]]; then echo "DESKTOP SMOKE: PASS"; else echo "DESKTOP SMOKE: FAIL"; fi

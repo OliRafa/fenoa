@@ -80,6 +80,20 @@ sed 's/#.*//' "$ROOT/packages/desktop.packages" | awk 'NF{print $1}' | grep -qx 
   fail "desktop.packages installs ffmpeg-free (ffplay, which the Pomodoro Timer plugin depends on)"
 pass "the Pomodoro Timer plugin is enabled and on the bar, and ffplay is installed for its sounds"
 
+[[ "$(toml "$noctalia_defaults" 't["widget"]["airpods"]["type"]')" == "harveywuk/airpods:airpods" ]] ||
+  fail "the airpods widget is the AirPods plugin's bar widget"
+[[ "$(toml "$noctalia_defaults" '"airpods" in t["bar"]["default"]["end"]')" == "True" ]] ||
+  fail "the AirPods widget is on the bar"
+grep -qE '^ARG LIBREPODS_COMMIT=[0-9a-f]{40}$' "$containerfile" || fail "librepods is built from a pinned commit"
+grep -qF 'COPY --from=librepods /out/usr/bin/librepods /out/usr/bin/librepods-ctl /usr/bin/' "$containerfile" ||
+  fail "the image carries the librepods daemon and the librepods-ctl the plugin runs"
+grep -qF 'systemctl --global enable librepods.service' "$containerfile" || fail "librepods runs for every user"
+for p in qt6-qtconnectivity qt6-qtbase-gui qt6-qtdeclarative; do
+  sed 's/#.*//' "$ROOT/packages/desktop.packages" | awk 'NF{print $1}' | grep -qx "$p" ||
+    fail "desktop.packages installs $p, whose Qt libraries librepods links"
+done
+pass "the AirPods plugin is enabled and on the bar, and the image runs its librepods daemon from a pinned commit"
+
 # --- greetd ↔ tmpfiles ↔ greeter ------------------------------------------------------------------
 
 greeter_user=$(toml "$greetd" 't["default_session"]["user"]')
@@ -135,6 +149,13 @@ check_preset "$D/usr/lib/systemd/system-preset/50-fenoa-desktop.preset" "$deskto
 grep -qx 'enable greetd.service' "$D/usr/lib/systemd/system-preset/50-fenoa-desktop.preset" ||
   fail "50-fenoa-desktop.preset enables greetd"
 pass "50-fenoa-desktop.preset covers greetd and graphical.target, read before Fedora's presets"
+# User units: the same rule against Fedora's user-preset 99-default-disable.preset, for the units the
+# stage enables with `systemctl --global` (which containerfile_units leaves out).
+global_units=$(printf '%s\n' "$desktop_stage" | sed -e '/^[[:space:]]*#/d' | sed -e ':a' -e '/\\$/N; s/\\\n//; ta' |
+  grep -oE 'systemctl --global (enable|disable) [^;&|]*' | sed 's/--global //' || true)
+[[ -n $global_units ]] || fail "the desktop stage enables user units globally (librepods)"
+check_preset "$D/usr/lib/systemd/user-preset/50-fenoa-desktop.preset" "$global_units"
+pass "user-preset/50-fenoa-desktop.preset covers the user units the desktop stage enables (librepods)"
 check_machine_id_last desktop "$desktop_stage"
 pass "the desktop stage ships /etc/machine-id as uninitialized again, after its package installs"
 

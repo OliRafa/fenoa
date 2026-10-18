@@ -4,7 +4,7 @@ Fenoa (Fedora Noctalia Atomic) is a bootc image for Apple Silicon Macs: Fedora A
 
 ## Layout
 
-- `images/fenoa/Containerfile` - two stages: `platform` (Fedora Asahi + bootc plumbing, no desktop) and the final desktop stage
+- `images/fenoa/Containerfile` - two stages: `platform` (Fedora Asahi + bootc plumbing, no desktop) and the final desktop stage, plus helper stages that only supply files (`brew`, and `librepods`, which builds the AirPods plugin's daemon)
 - `images/fairydust/Containerfile` - `FROM fenoa`; swaps the stock `kernel-16k` for the fairydust kernel and rebuilds the initramfs
 - `images/boottest/` - on-hardware boot smoke overlay (never published)
 - `images/*/hack/` - container smoke tests and the install-to-disk check CI runs against built images

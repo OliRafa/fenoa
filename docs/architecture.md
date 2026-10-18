@@ -10,6 +10,8 @@ quay.io/fedora-asahi-remix-atomic-desktops/base-atomic:44   Asahi kernel-16k, fi
        └─ images/fenoa/Containerfile  (stage: desktop)      Hyprland + Noctalia + greeter  →  ghcr.io/olirafa/fenoa
             └─ images/fairydust/Containerfile               fairydust kernel swap          →  ghcr.io/olirafa/fenoa-fairydust
 ghcr.io/ublue-os/brew           → prebuilt Homebrew tree copied in by the platform stage
+images/fenoa/Containerfile (stage: librepods) → the AirPods plugin's daemon, built from a pinned commit of
+                                  github.com/harveywuk/librepods and copied in by the desktop stage
 github.com/akitaonrails/ai-usagebar releases → the AI Usage plugin's CLI, signature-checked, copied in by the desktop stage
 ghcr.io/olirafa/omarchy-fairydust-kernel → /usr/lib/modules/<kver> copied in by the fairydust image
 ```
@@ -39,6 +41,7 @@ The split follows one rule: the **platform** stage holds everything a non-graphi
 | D2 | `hyprland` + `hyprland-uwsm`, falling back to the `-git` builds when stable is unresolvable |
 | D3 | `packages/desktop.packages` |
 | D3b | the `ai-usagebar` CLI for the AI Usage plugin: upstream's latest release, which must be signed by the pinned key (`AI_USAGEBAR_KEY`) |
+| D3c | `librepods` and `librepods-ctl` from the librepods stage for the AirPods plugin; its user unit pointed at `/usr/bin` and enabled for every user (`systemctl --global`, kept by `user-preset/50-fenoa-desktop.preset`); fail if either binary is missing a library |
 | D4 | `COPY system/desktop/ /`; assert the greeter account, binaries and session name; install the SELinux file context for the greeter's state directory |
 | D5 | enable greetd (it aliases `display-manager.service`); default to `graphical.target` |
 | D6 | `/etc/machine-id` = `uninitialized` again, in case anything D3 installed wrote an ID; clean residue; `bootc container lint` |
