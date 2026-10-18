@@ -27,16 +27,20 @@ auto_sync = true
 # - AI Usage: AI plan usage (Claude, Codex, Copilot, ...) and quota resets. The ai-usagebar CLI it
 #   runs is in the image (Containerfile D3b). It reuses each vendor's own CLI login (run `claude` or
 #   `codex login` once); API keys and opt-in vendors go in ~/.config/ai-usagebar/config.toml.
-enabled = ["felipeartur/ai-usagebar"]
+# - Calculator: a keypad and expression panel; the bar shows the last result.
+enabled = ["felipeartur/ai-usagebar", "yuuto/calculator"]
 
 [widget.ai_usage]
 type = "felipeartur/ai-usagebar:bar"
 
+[widget.calculator]
+type = "yuuto/calculator:bar"
+
 [bar.default]
 # Noctalia's default right-hand side, with the plugin widgets in front. Setting the list replaces the
 # default whole, so a widget Noctalia adds to its own default later does not appear here.
-end = ["ai_usage", "media", "tray", "notifications", "clipboard", "network", "bluetooth", "volume",
-       "brightness", "battery", "control-center", "session"]
+end = ["ai_usage", "calculator", "media", "tray", "notifications", "clipboard", "network",
+       "bluetooth", "volume", "brightness", "battery", "control-center", "session"]
 
 [theme.templates]
 # Re-colour GTK apps (adw-gtk3), foot and Hyprland's borders from the current palette.

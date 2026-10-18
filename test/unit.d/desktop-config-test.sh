@@ -66,6 +66,12 @@ grep -qE '^ARG AI_USAGEBAR_KEY=[0-9A-F]{40}$' "$containerfile" ||
   fail "the ai-usagebar release is checked against a pinned signing-key fingerprint"
 pass "the AI Usage plugin is enabled and on the bar, and the image carries its signed ai-usagebar CLI"
 
+[[ "$(toml "$noctalia_defaults" 't["widget"]["calculator"]["type"]')" == "yuuto/calculator:bar" ]] ||
+  fail "the calculator widget is the Calculator plugin's bar widget"
+[[ "$(toml "$noctalia_defaults" '"calculator" in t["bar"]["default"]["end"]')" == "True" ]] ||
+  fail "the Calculator widget is on the bar"
+pass "the Calculator plugin is enabled and on the bar"
+
 # --- greetd ↔ tmpfiles ↔ greeter ------------------------------------------------------------------
 
 greeter_user=$(toml "$greetd" 't["default_session"]["user"]')
