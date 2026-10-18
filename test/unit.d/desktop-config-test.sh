@@ -72,6 +72,14 @@ pass "the AI Usage plugin is enabled and on the bar, and the image carries its s
   fail "the Calculator widget is on the bar"
 pass "the Calculator plugin is enabled and on the bar"
 
+[[ "$(toml "$noctalia_defaults" 't["widget"]["pomodoro"]["type"]')" == "thepunkoff/pomodoro:widget" ]] ||
+  fail "the pomodoro widget is the Pomodoro Timer plugin's bar widget"
+[[ "$(toml "$noctalia_defaults" '"pomodoro" in t["bar"]["default"]["end"]')" == "True" ]] ||
+  fail "the Pomodoro Timer widget is on the bar"
+sed 's/#.*//' "$ROOT/packages/desktop.packages" | awk 'NF{print $1}' | grep -qx ffmpeg-free ||
+  fail "desktop.packages installs ffmpeg-free (ffplay, which the Pomodoro Timer plugin depends on)"
+pass "the Pomodoro Timer plugin is enabled and on the bar, and ffplay is installed for its sounds"
+
 # --- greetd ↔ tmpfiles ↔ greeter ------------------------------------------------------------------
 
 greeter_user=$(toml "$greetd" 't["default_session"]["user"]')

@@ -26,6 +26,7 @@ accountsservice             # avatars in the greeter
 gnome-keyring               # unlocked at login by /etc/pam.d/greetd
 libsecret
 ddcutil                     # Noctalia: brightness on DDC/CI external monitors
+ffmpeg-free                 # ffplay, for the Pomodoro plugin's sounds (already in the base image)
 
 # --- Theming (Noctalia's gtk3/gtk4 templates target adw-gtk3) ---
 adw-gtk3-theme
