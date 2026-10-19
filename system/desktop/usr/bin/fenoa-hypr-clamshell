@@ -4,7 +4,7 @@
 #
 # Usage: fenoa-hypr-clamshell close|open
 #
-# Bound in Hyprland to the Apple Silicon lid switch ("Apple SMC power/lid events"). With no external
+# Bound in Hyprland to the laptop's lid switch ("Lid Switch"). With no external
 # display, closing the lid leaves the panel alone and logind suspends as usual (an external display
 # makes logind treat the machine as docked and ignore the lid). The panel's name is left in
 # $XDG_RUNTIME_DIR/fenoa-clamshell while it is off, and the Hyprland defaults (fenoa/monitors.lua)

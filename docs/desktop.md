@@ -66,10 +66,10 @@ Defined in `/usr/share/fenoa/hypr/fenoa/bindings.lua`. Override or add bindings 
 |---|---|
 | Volume keys (`Alt` for 1% steps), mute, mic mute | Noctalia volume with OSD |
 | Brightness keys | Panel brightness |
-| `Shift + Brightness` | Keyboard backlight (`fenoa-kbd-backlight`; the Mac top row has no backlight keys) |
+| Keyboard-backlight keys | Keyboard backlight (`fenoa-kbd-backlight`); laptops that step it in firmware (ThinkPads' `Fn + Space`) need no binding |
 | Play/pause, next, previous | The active MPRIS player |
-| `Print`, `Super + F11`, `Super + Volume down` | Screenshot a region |
-| `Shift + Print`, `Super + F12`, `Super + Volume up` | Screenshot a display |
+| `Print`, `Super + F11` | Screenshot a region |
+| `Shift + Print`, `Super + F12` | Screenshot a display |
 | Lid closed with an external display | Internal panel off (`fenoa-hypr-clamshell`, kept off across config reloads); without one, logind suspends |
 
 ### Windows and workspaces

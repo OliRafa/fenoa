@@ -3,11 +3,6 @@
 -- https://wiki.hypr.land/Configuring/Basics/Variables/
 
 hl.config({
-  -- Mitigate fullscreen artifacts seen on Asahi when a client is scanned out directly.
-  render = {
-    direct_scanout = 0,
-  },
-
   general = {
     gaps_in = 5,
     gaps_out = 10,

@@ -17,9 +17,10 @@ hl.config({
     numlock_by_default = true,
 
     touchpad = {
-      -- Match macOS: natural scrolling, and physical clicks instead of taps. On the Asahi trackpad
-      -- disable_while_typing alone does not stop stray taps while typing; turning off tap_to_click
-      -- does. clickfinger_behavior makes a two-finger click a right click, three a middle click.
+      -- Natural scrolling, and physical clicks instead of taps: disable_while_typing alone does not
+      -- stop every stray tap while typing, and turning off tap_to_click does (set it to true in
+      -- hyprland.lua to tap). clickfinger_behavior makes a two-finger click a right click, three a
+      -- middle click, wherever on the touchpad, instead of the bottom corners.
       natural_scroll = true,
       tap_to_click = false,
       clickfinger_behavior = true,
@@ -33,7 +34,7 @@ hl.config({
   },
 })
 
--- Three-finger horizontal swipe switches workspaces, as on macOS.
+-- Three-finger horizontal swipe switches workspaces.
 hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
 
 -- foot scrolls by lines, so the global trackpad scroll factor makes it crawl.

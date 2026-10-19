@@ -232,9 +232,10 @@ while read -r verb; do
 done < <(grep -hoE 'noctalia\("[a-z-]+' "$hypr"/fenoa/bindings.lua | sed -E 's/noctalia\("//' | sort -u)
 pass "every Noctalia IPC verb the bindings use exists"
 
-grep -qF 'switch:on:Apple SMC power/lid events' "$hypr/fenoa/bindings.lua" ||
-  fail "the lid binding uses the Apple Silicon switch name"
-pass "the lid binding uses the Apple Silicon switch name"
+# A switch binding names the input device; a PC laptop's lid is the ACPI button driver's "Lid Switch".
+grep -qF 'switch:on:Lid Switch' "$hypr/fenoa/bindings.lua" && grep -qF 'switch:off:Lid Switch' "$hypr/fenoa/bindings.lua" ||
+  fail "the lid bindings name the laptop's \"Lid Switch\""
+pass "the lid bindings name the laptop's \"Lid Switch\""
 
 # With lock restore on, a second locker started while the screen is locked replaces the live lock
 # screen and can unlock.

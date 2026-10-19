@@ -4,10 +4,11 @@
 #
 # Usage: fenoa-kbd-backlight up|down|off|cycle
 #
-# Apple Silicon keyboards expose the backlight as the LED class device kbd_backlight (0-255 on the
-# M1/M2 laptops). The Mac top row has no backlight keys, so Hyprland binds Shift + brightness here.
-# Noctalia has keyboard-backlight-up/down of its own that step "one level"; this keeps the 10% steps
-# known to work on the 0-255 Apple backlight and borrows Noctalia's keyboard OSD for feedback.
+# Laptops expose the backlight as an LED class device named *kbd_backlight (tpacpi::kbd_backlight,
+# dell::kbd_backlight, asus::kbd_backlight...), with anything from 2 to 255 levels; Hyprland binds
+# the keyboard-backlight keys here. Noctalia has keyboard-backlight-up/down of its own that step
+# "one level"; this steps 10% of a fine-grained range (one level on a coarse one) and borrows
+# Noctalia's keyboard OSD for feedback.
 
 set -euo pipefail
 

@@ -1,8 +1,8 @@
 -- Key bindings. Shell surfaces (launcher, control center, notifications, OSD, lock, screenshots)
 -- are Noctalia's and are driven over its IPC; window management is Hyprland's.
 --
--- Apple keyboards: the top row sends media keys first (hid_apple fnmode=1, F1-F12 behind Fn) and
--- there is no Print key, so the capture bindings live on SUPER + the top-row keys too.
+-- Keyboards without a Print key (many compact laptops) get the capture bindings on SUPER + F11/F12
+-- too.
 
 local f = require("fenoa.helpers")
 local bind, launch, noctalia = f.bind, f.launch, f.noctalia
@@ -43,13 +43,11 @@ bind("XF86AudioMicMute", "Mute microphone", noctalia("mic-mute"), { locked = tru
 bind("XF86MonBrightnessUp", "Brightness up", noctalia("brightness-up"), { locked = true, repeating = true })
 bind("XF86MonBrightnessDown", "Brightness down", noctalia("brightness-down"), { locked = true, repeating = true })
 
--- The Mac top row has no keyboard-backlight keys (it only ever sends KEY_BRIGHTNESSUP/DOWN), so
--- the keyboard backlight lives on Shift + brightness. The dedicated keys stay bound for external
--- keyboards that have them.
-bind("SHIFT + XF86MonBrightnessUp", "Keyboard backlight up", "fenoa-kbd-backlight up", { locked = true, repeating = true })
-bind("SHIFT + XF86MonBrightnessDown", "Keyboard backlight down", "fenoa-kbd-backlight down", { locked = true, repeating = true })
+-- Keyboard-backlight keys, on laptops whose firmware hands them to the OS. Others (ThinkPads' Fn +
+-- Space) step the backlight in firmware and send nothing to bind.
 bind("XF86KbdBrightnessUp", "Keyboard backlight up", "fenoa-kbd-backlight up", { locked = true, repeating = true })
 bind("XF86KbdBrightnessDown", "Keyboard backlight down", "fenoa-kbd-backlight down", { locked = true, repeating = true })
+bind("XF86KbdLightOnOff", "Keyboard backlight step", "fenoa-kbd-backlight cycle", { locked = true })
 
 bind("XF86AudioPlay", "Play/pause", noctalia("media toggle"), { locked = true })
 bind("XF86AudioPause", "Play/pause", noctalia("media toggle"), { locked = true })
@@ -61,15 +59,13 @@ bind("PRINT", "Screenshot region", noctalia("screenshot-region"))
 bind("SHIFT + PRINT", "Screenshot display", noctalia("screenshot-fullscreen pick"))
 bind("SUPER + F11", "Screenshot region", noctalia("screenshot-region"))
 bind("SUPER + F12", "Screenshot display", noctalia("screenshot-fullscreen pick"))
-bind("SUPER + XF86AudioLowerVolume", "Screenshot region (Apple top row)", noctalia("screenshot-region"))
-bind("SUPER + XF86AudioRaiseVolume", "Screenshot display (Apple top row)", noctalia("screenshot-fullscreen pick"))
 
 -- --- Lid ------------------------------------------------------------------------------------------
--- Apple Silicon reports the lid as "Apple SMC power/lid events", not the generic "Lid Switch".
 -- With an external display attached, closing the lid turns the internal panel off instead of
--- leaving workspaces on a dark screen; with none, logind suspends as usual.
-bind("switch:on:Apple SMC power/lid events", nil, "fenoa-hypr-clamshell close", { locked = true })
-bind("switch:off:Apple SMC power/lid events", nil, "fenoa-hypr-clamshell open", { locked = true })
+-- leaving workspaces on a dark screen; with none, logind suspends as usual. "Lid Switch" is the
+-- name the kernel's ACPI button driver gives a PC laptop's lid.
+bind("switch:on:Lid Switch", nil, "fenoa-hypr-clamshell close", { locked = true })
+bind("switch:off:Lid Switch", nil, "fenoa-hypr-clamshell open", { locked = true })
 
 -- --- Windows --------------------------------------------------------------------------------------
 bind("SUPER + W", "Close window", hl.dsp.window.close())
