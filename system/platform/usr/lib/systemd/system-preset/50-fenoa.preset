@@ -9,7 +9,7 @@
 # back; platform-smoke.sh asserts that a full `systemctl preset-all` changes nothing. Masks are
 # left alone by presets.
 
-# SSH is opt-in (P9): Fedora's 90-default.preset enables sshd. To turn it on yourself:
+# SSH is opt-in (P8): Fedora's 90-default.preset enables sshd. To turn it on yourself:
 # `sudo systemctl enable --now sshd`, then let it through the firewall with
 # `sudo firewall-cmd --permanent --add-service=ssh && sudo firewall-cmd --reload`.
 disable sshd.service
@@ -20,11 +20,10 @@ disable sshd.service
 # so fenoa-firstboot-user would not count that account and would create a second one.
 disable systemd-homed-firstboot.service
 
-# The m1n1 refresh and first-boot provisioning (P6-P8). Without these lines a first boot would
-# disable the unit that creates the user account. fenoa-flatpak-preinstall.service and
-# fenoa-brew-setup.service have no [Install] section (their timers start them), so a preset pass
-# leaves them alone and only the timers are listed.
-enable fenoa-apply-m1n1.service
+# First-boot provisioning (P6-P7). Without these lines a first boot would disable the unit that
+# creates the user account. fenoa-flatpak-preinstall.service and fenoa-brew-setup.service have no
+# [Install] section (their timers start them), so a preset pass leaves them alone and only the
+# timers are listed.
 enable fenoa-firstboot-user.service
 enable fenoa-flatpak-preinstall.timer
 enable fenoa-flatpak-update.timer
@@ -33,7 +32,7 @@ enable brew-setup.service
 enable brew-update.timer
 enable brew-upgrade.timer
 
-# System services (P9). Fedora's presets enable most of these too; listing them keeps the image's
+# System services (P8). Fedora's presets enable most of these too; listing them keeps the image's
 # choice from depending on that. Fedora deliberately leaves cups.service to socket activation
 # (cups.socket, cups.path) and does not preset cups-browsed at all; Fenoa runs both from boot so
 # driverless network printers are discovered (/etc/cups/cups-browsed.conf).

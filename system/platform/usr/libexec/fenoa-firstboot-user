@@ -49,9 +49,10 @@ mark_done() {
 #
 # The bounds come from login.defs — the range useradd itself allocates from — NOT a hand-rolled
 # 1000..65533. systemd's DynamicUser= accounts are allocated from 61184-65519 and surface in
-# `getent passwd` through nss-systemd (they are never in /etc/passwd). On Asahi, speakersafetyd
-# runs exactly that way (uid 62454), which a naive range counts as a human account: the helper then
-# skipped on a machine that had no human user at all and the greeter had nothing to log in as.
+# `getent passwd` through nss-systemd (they are never in /etc/passwd). Any DynamicUser= service
+# shows up that way — speakersafetyd on Apple Silicon, at uid 62454, is how this was found: a naive
+# range counted it as a human account, so the helper skipped on a machine that had no human user at
+# all and the greeter had nothing to log in as.
 uid_min=$(awk '$1 == "UID_MIN" { print $2 }' "$login_defs" 2>/dev/null)
 uid_max=$(awk '$1 == "UID_MAX" { print $2 }' "$login_defs" 2>/dev/null)
 uid_min=${uid_min:-1000}

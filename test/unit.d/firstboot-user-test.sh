@@ -166,11 +166,12 @@ pass "run with an existing user creates nothing"
 [[ -f $marker ]] || fail "run with an existing user still marks done"
 pass "run with an existing user still marks done"
 
-# 3) A systemd DynamicUser= account must not read as a human user. speakersafetyd (Asahi speaker
-#    protection) runs with DynamicUser= and lands at uid 62454; systemd allocates that range
-#    (61184-65519) and nss-systemd shows it in getent. A uid>=1000 && uid<65534 test counts it as a
-#    human account, so the helper skipped on a machine with NO human user and the greeter greeted with
-#    nothing to log in as. login.defs UID_MAX (60000 on Fedora) is the bound that excludes it.
+# 3) A systemd DynamicUser= account must not read as a human user. speakersafetyd (Apple Silicon
+#    speaker protection, where this was found) runs with DynamicUser= at uid 62454; systemd
+#    allocates that range (61184-65519) and nss-systemd shows it in getent. A uid>=1000 &&
+#    uid<65534 test counts it as a human account, so the helper skipped on a machine with NO human
+#    user and the greeter greeted with nothing to log in as. login.defs UID_MAX (60000 on Fedora) is
+#    the bound that excludes it.
 : >"$mock_log"; rm -f "$marker"; write_preseed
 DYNAMIC_USER=1 run_helper || fail "run alongside a DynamicUser account succeeds" "$(cat "$test_tmp/out.log")"
 grep -q '^useradd .*tester' "$mock_log" ||

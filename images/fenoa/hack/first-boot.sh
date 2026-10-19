@@ -12,7 +12,7 @@
 # on a boot that is no longer a first boot. We populate /etc/machine-id before provisioning, so this
 # test runs in exactly that state.
 #
-# NOT covered here — needs a real booted session (images/boottest/ on a Mac): the tty1 interactive
+# NOT covered here — needs a real booted session (images/boottest/ on a PC or VM): the tty1 interactive
 # prompt and the greeter handoff.
 #
 #   ./images/fenoa/hack/first-boot.sh [IMAGE]           # default fenoa-platform:44
@@ -51,9 +51,9 @@ echo "== A) fenoa-firstboot-user (preseed) creates the primary user =="
 # systemd-machine-id-setup leaves the image's "uninitialized" in place.
 printf '%s\n' "$(head -c16 /dev/urandom | od -An -tx1 | tr -d ' \n')" >/etc/machine-id
 [[ "$(cat /etc/machine-id)" =~ ^[0-9a-f]{32}$ ]] && ok "/etc/machine-id populated (simulating a non-first boot)" || no "could not populate /etc/machine-id"
-# And a systemd DynamicUser= account, the way nss-systemd surfaces one: speakersafetyd on Asahi runs
-# at uid 62454. A naive uid>=1000 "is there a human user" test counts it, and the helper then skips
-# on a machine with no human user at all.
+# And a systemd DynamicUser= account, the way nss-systemd surfaces one (speakersafetyd on Apple
+# Silicon runs at uid 62454, which is how this was found). A naive uid>=1000 "is there a human user"
+# test counts it, and the helper then skips on a machine with no human user at all.
 echo 'speakersafetyd:x:62454:62454:Dynamic User:/:/usr/sbin/nologin' >>/etc/passwd
 ok "seeded a DynamicUser-range account (uid 62454)"
 install -d /etc/fenoa

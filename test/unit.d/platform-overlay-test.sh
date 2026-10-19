@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Static checks on the platform layer that only fail on real hardware if they regress: the Apple HID
-# early-load fix has to reach the initramfs, which only happens if its drop-ins are in the image
-# before images/fenoa/Containerfile rebuilds it; the units the Containerfile enables have to exist;
-# and nothing from Omarchy may leak back in.
+# Static checks on the platform layer that only fail on a real boot if they regress: the rebuilt
+# initramfs has to carry both root pivots (composefs for a Fenoa install, ostree for a Fedora Atomic
+# switched to Fenoa) and pick up the overlay's drop-ins; the units the Containerfile enables have to
+# exist; and nothing from Omarchy may leak back in.
 
 source "$(dirname "$0")/base-test.sh"
 
@@ -11,30 +11,24 @@ overlay="$ROOT/system/platform"
 containerfile="$ROOT/images/fenoa/Containerfile"
 packages="$ROOT/packages/platform.packages"
 
-# --- Apple HID: modprobe + dracut drop-ins ------------------------------------------------------
+# --- initramfs: both root pivots ---------------------------------------------------------------
 
-grep -qx 'options hid_apple fnmode=1' "$overlay/usr/lib/modprobe.d/fenoa-apple.conf" ||
-  fail "hid_apple fnmode=1 is configured"
-grep -qE '^force_drivers\+=" hid_apple hid_magicmouse "$' "$overlay/usr/lib/dracut/dracut.conf.d/90-fenoa-apple-hid.conf" ||
-  fail "dracut forces hid_apple + hid_magicmouse into the initramfs"
-pass "the Apple HID modprobe and dracut drop-ins are present"
+# dracut includes neither module unless named, and without bootc's the composefs install boots the
+# image's kernel against whatever /usr is on disk; without ostree's, a switched Fedora Atomic does.
+grep -qF -- '--add "$modname ostree"' "$containerfile" ||
+  fail "the initramfs rebuild adds the bootc and ostree dracut modules"
+grep -qF 'for u in bootc-root-setup ostree-prepare-root; do' "$containerfile" ||
+  fail "the build checks the rebuilt initramfs for both root-setup units"
+pass "the initramfs rebuild adds and checks the composefs and ostree root pivots"
 
-# The overlay COPY must come before the initramfs rebuild, or the drop-ins never reach it. Compare
-# line numbers within the platform stage.
+# The overlay COPY must come before the initramfs rebuild, or a dracut or modprobe drop-in it ships
+# never reaches the initramfs. Compare line numbers within the platform stage.
 copy_line=$(grep -n '^COPY system/platform/ /' "$containerfile" | head -1 | cut -d: -f1)
 dracut_line=$(grep -n 'dracut --force' "$containerfile" | head -1 | cut -d: -f1)
 [[ -n $copy_line && -n $dracut_line ]] || fail "the Containerfile copies the overlay and rebuilds the initramfs"
 (( copy_line < dracut_line )) ||
   fail "the platform overlay is copied before the initramfs rebuild" "COPY at $copy_line, dracut at $dracut_line"
 pass "the platform overlay is copied before the initramfs rebuild"
-
-# hid-magicmouse is built into both the stock kernel-16k and the fairydust kernel while hid-apple is
-# a module. The build-time initramfs check must accept a built-in driver, or it rejects every build.
-for f in "$containerfile" "$ROOT/images/fairydust/Containerfile"; do
-  [[ -f $f ]] || continue
-  grep -q 'modules.builtin' "$f" || fail "${f#"$ROOT"/} accepts built-in HID drivers in its initramfs check"
-done
-pass "the initramfs checks accept built-in HID drivers"
 
 # --- units the Containerfile enables exist ------------------------------------------------------
 
@@ -93,16 +87,15 @@ pass "the platform layer carries no desktop packages"
 
 # --- no Omarchy, consistent shebangs ------------------------------------------------------------
 
-# The fairydust kernel is consumed from its own repo's image, ghcr.io/olirafa/omarchy-fairydust-kernel;
-# that name is the only allowed mention (the smoke tests under hack/ assert Omarchy is absent).
-leaks=$(grep -rniE 'omarchy' "$ROOT/system" "$ROOT/images" "$ROOT/packages" 2>/dev/null | grep -v 'omarchy-fairydust-kernel' | grep -v '/hack/' || true)
+# The smoke tests under hack/ assert Omarchy is absent, so they name it.
+leaks=$(grep -rniE 'omarchy' "$ROOT/system" "$ROOT/images" "$ROOT/packages" 2>/dev/null | grep -v '/hack/' || true)
 [[ -z $leaks ]] || fail "no Omarchy references in the image sources" "$leaks"
 pass "no Omarchy references in the image sources"
 
 while IFS= read -r script; do
   first=$(head -n1 "$ROOT/$script")
   [[ $first == "#!/bin/bash" ]] || fail "$script uses #!/bin/bash" "got: $first"
-done < <("$ROOT/test/shell-files" | grep -vE '^deploy/lib/|/profile.d/|^test/unit.d/base-test.sh$')
+done < <("$ROOT/test/shell-files" | grep -vE '/profile.d/|^test/unit.d/base-test.sh$')
 pass "every executable shell script uses #!/bin/bash (sourced files are exempt)"
 
 # A script committed without its executable bit fails wherever it is run directly (CI runs the image
@@ -110,5 +103,5 @@ pass "every executable shell script uses #!/bin/bash (sourced files are exempt)"
 # match. base-test.sh is only ever sourced.
 while IFS= read -r script; do
   [[ -x $ROOT/$script ]] || fail "$script is executable"
-done < <("$ROOT/test/shell-files" | grep -vE '^deploy/lib/|/profile.d/|^test/unit.d/base-test.sh$')
+done < <("$ROOT/test/shell-files" | grep -vE '/profile.d/|^test/unit.d/base-test.sh$')
 pass "every executable shell script has its executable bit"

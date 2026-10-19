@@ -1,53 +1,52 @@
 # Fenoa
 
-**Fe**dora **No**ctalia **A**tomic — an image-based desktop for Apple Silicon Macs.
+**Fe**dora **No**ctalia **A**tomic — an image-based desktop for x86_64 PCs.
 
-Fenoa is a [bootc](https://bootc-dev.github.io/bootc/) image built on [Fedora Asahi Remix](https://asahilinux.org/fedora/)'s atomic base: a [Hyprland](https://hypr.land) desktop with the [Noctalia](https://noctalia.dev) shell and [noctalia-greeter](https://github.com/noctalia-dev/noctalia-greeter) login screen, booted through systemd-boot on bootc's composefs backend. The whole OS is one signed container image; updates are atomic and roll back with `bootc rollback`.
+Fenoa is a [bootc](https://bootc-dev.github.io/bootc/) image built on Fedora's atomic base: a [Hyprland](https://hypr.land) desktop with the [Noctalia](https://noctalia.dev) shell and [noctalia-greeter](https://github.com/noctalia-dev/noctalia-greeter) login screen, booted through systemd-boot on bootc's composefs backend. The whole OS is one signed container image; updates are atomic and roll back with `bootc rollback`.
 
 | Image | What it is |
 |---|---|
-| `ghcr.io/olirafa/fenoa:44` | Hyprland + Noctalia on the stock Asahi `kernel-16k` (a multi-arch name: on a Mac it resolves to `fenoa:44-arm64`) |
-| `ghcr.io/olirafa/fenoa-fairydust:44` | The same with the experimental [fairydust](docs/fairydust.md) kernel, for USB-C DisplayPort alt-mode |
+| `ghcr.io/olirafa/fenoa:44` | Hyprland + Noctalia. A multi-arch name: on a PC it resolves to `fenoa:44-amd64`, built from this branch; on an Apple Silicon Mac to `fenoa:44-arm64`, built from the [`asahi` branch](https://github.com/OliRafa/fenoa/tree/asahi) |
 
-Both are rebuilt weekly and on every change, smoke-tested, and cosign-signed.
+It is rebuilt weekly and on every change, smoke-tested, and cosign-signed.
 
 ## What you get
 
 - **Desktop:** Hyprland (Lua config) with Noctalia for the bar, launcher, control center, notifications, OSD, lock screen, idle handling, polkit prompts, clipboard history, screenshots, night light and wallpaper. Noctalia's palette (a built-in scheme, or one generated from your wallpaper) also colours native GTK apps (Nautilus, settings dialogs), foot and Hyprland's borders. Flatpak apps don't get the palette, but they do follow the light/dark switch: GTK3, GTK4/libadwaita and Qt apps on Flathub runtimes, and Firefox, Chromium and Electron apps whose own theme setting is "system" or "device". GTK3 and Qt apps on Fedora's runtimes (OBS) don't get the dark GTK theme; OBS uses its own themes anyway.
 - **Login:** noctalia-greeter on greetd, styled like the shell (Noctalia syncs your wallpaper and palette to it). Your login password unlocks the GNOME keyring.
 - **Apps:** foot, Nautilus, mpv, wf-recorder, udiskie (USB automount), Docker and Homebrew in the image; Brave, Loupe, Evince, LibreOffice, Obsidian, LocalSend (Flathub) and OBS Studio (Fedora's Flatpak — Flathub has no aarch64 build) installed on first boot; shell and developer tools (starship, zoxide, fzf, eza, bat, ripgrep, fd, lazygit, btop, Neovim, tmux, gh, language toolchains) from the [Brewfile](Brewfile). Source Code Pro is the default monospace font.
-- **Apple Silicon:** systemd-boot on composefs, m1n1/devicetree refresh after updates, the trackpad boot-race fix and macOS-style function keys in the initramfs, keyboard backlight on Shift+brightness, the Apple lid switch, Widevine DRM for Brave on aarch64. See [docs/asahi.md](docs/asahi.md).
+- **PC hardware:** UEFI machines with AMD or Intel graphics, booted through systemd-boot on composefs (Secure Boot off), with Fedora's firmware, microcode and fwupd. See [docs/platform.md](docs/platform.md).
 
 ## Install
 
-On a Mac running **Fedora Asahi Remix 44** (install it alongside macOS first):
+Turn Secure Boot off in the firmware setup, boot any Linux live image with podman (Fedora Workstation Live has it), and install onto a disk, which this erases:
 
 ```sh
-sudo dnf install -y git podman          # Fedora Asahi Remix Minimal ships neither
-git clone https://github.com/OliRafa/fenoa && cd fenoa
-sudo deploy/fenoa-install ghcr.io/olirafa/fenoa:44     # or ghcr.io/olirafa/fenoa-fairydust:44
+sudo podman run --rm --privileged --pid=host \
+  --security-opt label=type:unconfined_t \
+  -v /dev:/dev -v /var/lib/containers:/var/lib/containers \
+  ghcr.io/olirafa/fenoa:44 \
+  bootc install to-disk --composefs-backend --bootloader systemd --filesystem btrfs /dev/nvme0n1
 sudo reboot
 ```
 
-The installer grows the Asahi ESP if needed, preserves the m1n1/firmware preboot layer, and installs Fenoa with the composefs backend and systemd-boot. Details and recovery: [deploy/README.md](deploy/README.md).
-
-Already on a composefs + systemd-boot bootc image (such as omarchy-atomic)? Switch in place:
+Already on Fedora Atomic (Silverblue, Kinoite...) or another bootc image? Switch in place; this keeps that system's bootloader (and Secure Boot), its users and its machine ID:
 
 ```sh
 sudo bootc switch ghcr.io/olirafa/fenoa:44
 sudo reboot
 ```
 
+Details, hardware support and caveats: [docs/platform.md](docs/platform.md).
+
 ### First boot
 
-This is the first boot of a fresh install (`deploy/fenoa-install`, or any `bootc install`). A `bootc switch` from an existing system keeps its machine ID and its user, so neither prompt below appears.
+This is the first boot of a fresh install (`bootc install`). A `bootc switch` from an existing system keeps its machine ID and its user, so neither prompt below appears.
 
 1. `systemd-firstboot` asks on tty1 for the locale, the keymap and the timezone. It asks for no hostname (set one later with `hostnamectl hostname <name>`) and no root password: root stays locked, and the user you create next gets `sudo`. The login screen and Hyprland follow the keymap you pick.
 2. `fenoa-firstboot-user` asks for your username, full name and password on tty1 (or reads a preseed from `/etc/fenoa/firstboot-user.conf`). The account's login shell is zsh, with Fedora's stock configuration (the `~/.zshrc` and `~/.zprofile` the zsh package puts in `/etc/skel`).
 3. The greeter comes up; log in to the **Hyprland (uwsm-managed)** session. Noctalia's setup wizard takes it from there.
-4. In the background the Flatpak apps and the Brewfile install once the network is up: until Flathub, Fedora's registry and Homebrew's servers answer over HTTPS, each is tried again every couple of minutes, so connecting to Wi-Fi from the desktop is enough. A Flatpak install that fails is tried again a couple of minutes later too; only if a remote answers but its index then cannot be fetched does `flatpak preinstall` report "Nothing to do." and succeed, and the app set waits for the next boot. A Brewfile that fails to apply is tried again after a growing delay (5 minutes, up to 2 hours). A reboot or two later, `fenoa-apply-m1n1` has refreshed m1n1 and the devicetree for the installed kernel.
-
-Then, for DRM video in Brave: open Brave once, and run `fenoa-widevine`.
+4. In the background the Flatpak apps and the Brewfile install once the network is up: until Flathub, Fedora's registry and Homebrew's servers answer over HTTPS, each is tried again every couple of minutes, so connecting to Wi-Fi from the desktop is enough. A Flatpak install that fails is tried again a couple of minutes later too; only if a remote answers but its index then cannot be fetched does `flatpak preinstall` report "Nothing to do." and succeed, and the app set waits for the next boot. A Brewfile that fails to apply is tried again after a growing delay (5 minutes, up to 2 hours).
 
 Fenoa's shell setup for the Brewfile's tools (the starship prompt, zoxide, fzf and eza) is wired into bash only, by `/etc/profile.d/fenoa-shell.sh`; zsh gets none of it. Accounts that already existed keep their login shell, including one carried over by a `bootc switch`: `chsh -s /usr/bin/zsh` switches to zsh, `chsh -s /bin/bash` back.
 
@@ -64,29 +63,26 @@ Fenoa's shell setup for the Brewfile's tools (the starship prompt, zoxide, fzf a
 sudo bootc upgrade && sudo reboot
 ```
 
-Apple Silicon needs one more reboot when the kernel changes: the first boot onto a new kernel refreshes m1n1 and the devicetree, the next one uses them (`FENOA_M1N1_AUTOREBOOT=1` in `/etc/default/fenoa-m1n1` takes it automatically). Flatpaks update daily and Homebrew updates itself, independently of the image. `sudo bootc rollback` returns to the previous image.
+Flatpaks update daily and Homebrew updates itself, independently of the image. `sudo bootc rollback` returns to the previous image.
 
 ## Build and test
 
-On an aarch64 host with podman and ~20 GB free:
+On an x86_64 host with podman and ~20 GB free:
 
 ```sh
 ./images/build.sh fenoa          # platform stage + desktop → fenoa:44
-./images/build.sh fairydust      # FROM fenoa:44 → fenoa-fairydust:44
-./test/all                       # no image needed: syntax, unit tests, deploy library tests
+./test/all                       # no image needed: syntax and unit tests
 ```
 
-The image smoke tests and a real `bootc install to-disk` run in CI on an arm64 runner. See [docs/testing.md](docs/testing.md).
+The image smoke tests and a real `bootc install to-disk` run in CI on an x86_64 runner. See [docs/testing.md](docs/testing.md).
 
 ## Documentation
 
 - [docs/architecture.md](docs/architecture.md) — how the image is put together
 - [docs/desktop.md](docs/desktop.md) — the session, key bindings, configuration and the greeter
-- [docs/asahi.md](docs/asahi.md) — Apple Silicon platform decisions
-- [docs/fairydust.md](docs/fairydust.md) — the fairydust kernel variant
+- [docs/platform.md](docs/platform.md) — installing, hardware support and the x86_64 platform decisions
 - [docs/testing.md](docs/testing.md) — what is tested where
-- [deploy/README.md](deploy/README.md) — installing, the ESP, signing, first boot, m1n1
 
 ## Credits
 
-Fenoa's platform layer — the bootc plumbing for Asahi, the first-boot and provisioning helpers, the deploy tooling and much of the system tuning — comes from omarchy-atomic, a Fedora Asahi atomic fork of [Omarchy](https://omarchy.org). Thanks to the [Asahi Linux](https://asahilinux.org) project, the [Fedora Asahi Remix atomic desktops](https://github.com/fedora-asahi-remix-atomic-desktops) project, [Universal Blue](https://universal-blue.org) for the prebuilt Homebrew image, and the [Noctalia](https://noctalia.dev) team.
+Fenoa's platform layer — the bootc plumbing, the first-boot and provisioning helpers and much of the system tuning — comes from omarchy-atomic, a Fedora Asahi atomic fork of [Omarchy](https://omarchy.org), by way of Fenoa for Apple Silicon. Thanks to the [Fedora Atomic Desktops](https://fedoraproject.org/atomic-desktops/) and [Asahi Linux](https://asahilinux.org) projects, [Universal Blue](https://universal-blue.org) for the prebuilt Homebrew image, and the [Noctalia](https://noctalia.dev) team.

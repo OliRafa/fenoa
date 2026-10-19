@@ -1,8 +1,8 @@
 #!/bin/bash
 # Boot smoke test for Fenoa, run at boot by fenoa-boottest.service (images/boottest/). Asserts what
-# a container inspection cannot: that the image booted on the Asahi kernel through systemd-boot,
-# brought its services and the greeter up, loaded the Apple HID drivers early, and that SELinux let
-# the greeter work. Exits non-zero on any failure.
+# a container inspection cannot: that the image booted Fedora's kernel through systemd-boot, brought
+# its services and the greeter up, and that SELinux let the greeter work. Exits non-zero on any
+# failure. Runs on a PC or in a UEFI VM (OVMF), with Secure Boot off.
 set -uo pipefail
 
 fail=0
@@ -14,21 +14,19 @@ echo "== kernel =="
 kver="$(uname -r)"
 echo "  kernel: $kver"
 case $kver in
-  *16k*|*asahi*) ok "stock Asahi kernel-16k running" ;;
-  *+) ok "fairydust kernel running" ;;
+  *.fc*.x86_64) ok "Fedora x86_64 kernel running" ;;
   *) no "unexpected kernel: $kver" ;;
 esac
 render="$(ls /dev/dri/renderD* 2>/dev/null | head -1 || true)"
 [[ -n $render ]] && ok "GPU render node present ($render)" || no "no GPU render node — the desktop would render on llvmpipe"
 
 echo "== bootloader: systemd-boot (not GRUB) =="
-# bootctl only looks for the ESP at /efi, /boot and /boot/efi; on Asahi the OS ESP may be mounted
-# nowhere. Locate it the way m1n1 does (the device tree names it) and mount it read-only if needed,
-# so the "no grub" check below is not vacuous.
+# bootctl only looks for the ESP at /efi, /boot and /boot/efi, and a composefs install may mount it
+# nowhere. Find it by its GPT partition type and mount it read-only if needed, so the "no grub"
+# check below is not vacuous.
 esp="$(bootctl --print-esp-path 2>/dev/null || true)" esp_tmp=""
 if [[ -z $esp ]]; then
-  esp_uuid="$(tr -d '\0' </proc/device-tree/chosen/asahi,efi-system-partition 2>/dev/null || true)"
-  esp_dev="$(blkid -t "PARTUUID=$esp_uuid" -o device 2>/dev/null || true)"
+  esp_dev="$(lsblk -nrpo PATH,PARTTYPE 2>/dev/null | awk 'tolower($2) == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" { print $1; exit }')"
   if [[ -n $esp_dev ]]; then
     esp="$(findmnt -no TARGET "$esp_dev" 2>/dev/null | head -1 || true)"
     if [[ -z $esp ]]; then
@@ -37,26 +35,22 @@ if [[ -z $esp ]]; then
     fi
   fi
 fi
-[[ -n $esp ]] && ok "OS ESP located at $esp" || no "OS ESP not found"
+[[ -n $esp ]] && ok "ESP located at $esp" || no "ESP not found"
 status="$(bootctl status 2>/dev/null || true)"
 case $status in *systemd-boot*) ok "systemd-boot is the active bootloader" ;; *) no "systemd-boot not active" ;; esac
+secure_boot="$(printf '%s\n' "$status" | sed -n 's/^ *Secure Boot: *//p' | head -1)"
+note "Secure Boot: ${secure_boot:-unknown} (systemd-boot is unsigned; it boots only with Secure Boot off)"
 if [[ -n $esp ]]; then
-  grub="$(find "$esp" -iname 'grub*.efi' -print -quit 2>/dev/null || true)"
-  [[ -z $grub ]] && ok "no grub on the ESP" || no "grub on the ESP: $grub"
-  [[ -f $esp/m1n1/boot.bin ]] && ok "m1n1 stage 2 present" || no "m1n1/boot.bin missing"
+  grub="$(find "$esp" \( -iname 'grub*.efi' -o -iname 'shim*.efi' \) -print -quit 2>/dev/null || true)"
+  [[ -z $grub ]] && ok "no GRUB or shim on the ESP" || no "GRUB or shim on the ESP: $grub"
 fi
 if [[ -n $esp_tmp ]]; then
   umount "$esp_tmp" 2>/dev/null || true
   rmdir "$esp_tmp" 2>/dev/null || true
 fi
 
-echo "== m1n1 / devicetree applied for the running kernel =="
-[[ "$(cat /var/lib/fenoa/m1n1-applied 2>/dev/null)" == "$kver" ]] \
-  && ok "m1n1 + devicetree applied for $kver" \
-  || no "m1n1 not yet applied for the running kernel — reboot once (fenoa-apply-m1n1)"
-
 echo "== services =="
-for u in greetd NetworkManager systemd-resolved power-profiles-daemon upower firewalld speakersafetyd; do
+for u in greetd NetworkManager systemd-resolved power-profiles-daemon upower firewalld; do
   systemctl is-active --quiet "$u.service" && ok "$u active" || no "$u not active"
 done
 systemctl is-active --quiet bluetooth.service && ok "bluetooth active" || note "bluetooth inactive (ok without an adapter)"
@@ -72,17 +66,6 @@ state="$(stat -c '%a %U' /var/lib/noctalia-greeter 2>/dev/null || true)"
 [[ $state == "750 greetd" ]] && ok "/var/lib/noctalia-greeter is 0750 greetd" || no "greeter state dir wrong: ${state:-missing}"
 denials="$(journalctl -b -k -g 'avc:  denied' --no-pager -q 2>/dev/null | grep -E 'greetd|noctalia|xdm' || true)"
 [[ -z $denials ]] && ok "no SELinux denials for greetd/noctalia-greeter" || no "SELinux denials: $(printf '%s' "$denials" | head -3)"
-
-echo "== Apple keyboard + trackpad =="
-[[ "$(cat /sys/module/hid_apple/parameters/fnmode 2>/dev/null)" == "1" ]] && ok "hid_apple fnmode=1" || no "hid_apple fnmode is not 1"
-devices="$(cat /proc/bus/input/devices 2>/dev/null || true)"
-# M1 13" laptops expose SPI devices ("Apple SPI Trackpad"); M2 and later, MTP ("Apple MTP multi-touch").
-case $devices in
-  *"Apple SPI Trackpad"*|*"Apple MTP multi-touch"*) ok "internal trackpad present" ;;
-  *) note "no internal trackpad (desktop Mac?)" ;;
-esac
-initrd_hid="$(journalctl -b -k --no-pager -q 2>/dev/null | grep -m1 -i 'hid-apple\|hid_apple' || true)"
-[[ -n $initrd_hid ]] && note "hid_apple: $initrd_hid"
 
 echo "== first-boot provisioning =="
 # The image ships /etc/machine-id as "uninitialized". On the first boot PID 1 bind-mounts a

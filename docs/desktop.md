@@ -62,8 +62,6 @@ Defined in `/usr/share/fenoa/hypr/fenoa/bindings.lua`. Override or add bindings 
 
 ### Media and hardware
 
-The Mac top row sends these without Fn (`hid_apple fnmode=1`).
-
 | Keys | Action |
 |---|---|
 | Volume keys (`Alt` for 1% steps), mute, mic mute | Noctalia volume with OSD |
@@ -108,11 +106,11 @@ The Mac top row sends these without Fn (`hid_apple fnmode=1`).
 
 Hyprland does not let a second locker replace a live session lock (`misc.allow_session_lock_restore = false` in `/usr/share/fenoa/hypr/fenoa/looknfeel.lua`): while the screen is locked, a client that starts its own lock cannot take over from Noctalia's lock screen and unlock. It does not protect against programs already running as you, which can turn the option back on with `hyprctl` exactly as step 2 below does. The flip side is that if Noctalia dies while the screen is locked, the session stays locked with nothing to type the password into. This is the procedure to recover it without logging out:
 
-1. Switch to a text console with `Ctrl + Alt + Fn + F2` (the top row sends media keys unless Fn is held, `hid_apple fnmode=1`) and log in as yourself.
+1. Switch to a text console with `Ctrl + Alt + F2` (add `Fn` on a laptop whose top row sends media keys first) and log in as yourself.
 2. Let a new client take the lock over, for now: `hyprctl --instance 0 eval 'hl.config({ misc = { allow_session_lock_restore = true } })'` (`--instance 0` picks the first running Hyprland).
 3. Start Noctalia again: `hyprctl --instance 0 eval 'hl.exec_cmd("uwsm-app -s s -- noctalia")'`
 4. Ask it to lock, which replaces the dead lock: `loginctl lock-sessions` (with Noctalia running, logind's lock request goes through Noctalia's lock screen).
-5. Go back with `Ctrl + Alt + Fn + F1` and unlock. The setting reverts at the next config reload or login.
+5. Go back with `Ctrl + Alt + F1` (again with `Fn` if needed) and unlock. The setting reverts at the next config reload or login.
 
 ## The greeter
 

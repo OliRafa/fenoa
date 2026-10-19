@@ -3,7 +3,7 @@
 # it: systemd-boot on the ESP (no GRUB), a kernel staged under EFI/Linux, the composefs-native
 # deployment root (/composefs, /ostree, /state), and a deployment /etc whose machine-id still reads
 # "uninitialized", so the installed system detects its first boot. This is the shipping install
-# path, minus the Asahi preboot layer (deploy/tests/esp-bootc-integration.sh covers that).
+# path (docs/platform.md), with --generic-image so it leaves the runner's firmware boot entries alone.
 #
 # Needs root, loop devices and rootful podman with the image in /var/lib/containers:
 #   sudo ./images/fenoa/hack/install-to-disk.sh [IMAGE] [WORKDIR]
@@ -27,7 +27,7 @@ echo "== bootc install to-disk: $IMAGE =="
     --composefs-backend --bootloader systemd --filesystem btrfs \
     --generic-image --via-loopback --wipe /output/disk.raw
 
-# Inspect by loopback mount (no libguestfs — its qemu appliance won't launch on the arm runner).
+# Inspect by loopback mount (no libguestfs: its qemu appliance needs KVM, which a runner may lack).
 # p1 = ESP (vfat), p2 = root (btrfs).
 loop=$(losetup -Pf --show "$disk")
 mnt="$WORKDIR/mnt"
@@ -47,8 +47,8 @@ sd=0 grub=0 kern=0 cfs=0 ost=0 st=0 mid=0
 mount "${loop}p1" "$mnt/esp"
 echo "--- ESP /EFI ---"
 find "$mnt/esp/EFI" -maxdepth 3 -print 2>/dev/null || true
-[[ -e $mnt/esp/EFI/systemd/systemd-bootaa64.efi || -e $mnt/esp/EFI/BOOT/BOOTAA64.EFI ]] && sd=1
-[[ -e $mnt/esp/EFI/fedora/grubaa64.efi ]] && grub=1
+[[ -e $mnt/esp/EFI/systemd/systemd-bootx64.efi || -e $mnt/esp/EFI/BOOT/BOOTX64.EFI ]] && sd=1
+[[ -n "$(find "$mnt/esp/EFI" -iname 'grub*.efi' -o -iname 'shim*.efi' 2>/dev/null | head -1)" ]] && grub=1
 [[ -n "$(find "$mnt/esp/EFI/Linux" -name vmlinuz 2>/dev/null | head -1)" ]] && kern=1
 umount "$mnt/esp"
 
@@ -81,7 +81,7 @@ check() { # check <ok> <pass message> <fail message>
   if (( $1 )); then echo "OK: $2"; else echo "FAIL: $3"; fail=1; fi
 }
 check "$sd" "systemd-boot on ESP" "systemd-boot missing from ESP"
-check "$(( ! grub ))" "no grub on ESP" "grub present on ESP"
+check "$(( ! grub ))" "no GRUB or shim on ESP" "GRUB or shim present on ESP"
 check "$kern" "kernel staged on ESP" "no kernel on ESP"
 check "$cfs" "/composefs deployment store present" "no /composefs (composefs deploy incomplete)"
 check "$ost" "/ostree present" "no /ostree"

@@ -2,18 +2,17 @@ name: Image e2e
 
 # Builds the image from source, runs the container smoke tests, and validates a real
 # `bootc install to-disk` (composefs-native + systemd-boot — the shipping bootloader) by
-# loopback-mounting the installed disk. aarch64 runner because the image is Apple-Silicon /
-# Fedora Asahi only.
+# loopback-mounting the installed disk. x86_64 runner: main is the x86_64 stream (the asahi branch
+# builds Apple Silicon on an arm64 runner).
 #
-# Not covered here (needs a real Mac): the physical boot and first-boot service execution — the
-# Asahi kernel won't boot in generic qemu. That's the on-hardware images/boottest/ harness.
+# Not covered here: the physical boot and first-boot service execution. That's the
+# images/boottest/ harness, on a PC or in a UEFI VM.
 on:
   push:
     paths:
       - 'images/**'
       - 'system/**'
       - 'packages/**'
-      - 'deploy/**'
       - 'Brewfile'
       - '.github/workflows/image-e2e.yml'
   pull_request:
@@ -21,7 +20,6 @@ on:
       - 'images/**'
       - 'system/**'
       - 'packages/**'
-      - 'deploy/**'
       - 'Brewfile'
       - '.github/workflows/image-e2e.yml'
   schedule:
@@ -36,7 +34,7 @@ concurrency:
 
 jobs:
   e2e:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -85,34 +83,25 @@ jobs:
       - name: bootc install to-disk (composefs + systemd-boot) + deploy assertions
         run: sudo env ENGINE=podman ./images/fenoa/hack/install-to-disk.sh fenoa:44 "$RUNNER_TEMP/out"
 
-      # Real-bootc proxy for the install wrapper: `bootc install to-filesystem` onto a loopback disk
-      # whose ESP is pre-populated like a real Asahi ESP. Proves esp_backup/esp_restore preserve the
-      # preboot layer around an ACTUAL install. The work dir must be a real directory inside the
-      # image (/home is a symlink to /var/home there), hence /var/tmp.
-      - name: bootc install to-filesystem — ESP preboot preservation (real bootc)
-        run: |
-          sudo rm -rf "$RUNNER_TEMP/out"   # the install-to-disk step ran as root
-          sudo env ENGINE=podman bash deploy/tests/esp-bootc-integration.sh fenoa:44 /var/tmp/esp-int
-
       # The platform stage is no longer needed; reclaim its tag before the next build.
       - name: Drop the platform stage tag
         run: sudo podman rmi fenoa-platform:44 || true
 
-      # fairydust: FROM fenoa, with the stock kernel-16k swapped for the experimental fairydust kernel
-      # (a prebuilt context image from ghcr — no kernel compile here) and the initramfs rebuilt.
-      - name: Build the fairydust variant (kernel swap + initramfs rebuild)
-        run: sudo env ENGINE=podman ./images/build.sh fairydust
-
-      - name: Fairydust smoke test
-        run: sudo env ENGINE=podman ./images/fairydust/hack/smoke.sh fenoa-fairydust:44
-
-      - name: Platform + desktop smoke (fairydust image)
-        run: |
-          sudo env ENGINE=podman KERNEL=fairydust ./images/fenoa/hack/platform-smoke.sh fenoa-fairydust:44
-          sudo env ENGINE=podman ./images/fenoa/hack/desktop-smoke.sh fenoa-fairydust:44
-
-      - name: Build the on-hardware boot-test overlay
+      - name: Build the boot-test overlay
         run: sudo podman build -t fenoa:44-boottest --build-arg BASE=fenoa:44 -f images/boottest/Containerfile .
+
+  # The asahi branch's weekly run. GitHub runs schedules only on the default branch, so this one
+  # starts it there; that run publishes the Apple Silicon image like a push does.
+  asahi-weekly:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch Image e2e on the asahi branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run image-e2e.yml --repo "$GITHUB_REPOSITORY" --ref asahi
 
   # Publish what e2e just tested, from a stream branch (main: x86_64, asahi: Apple Silicon) and never
   # for a pull request. GitHub runs scheduled and workflow_run workflows only from the default branch,

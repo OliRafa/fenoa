@@ -1,19 +1,18 @@
 name: Publish images (GHCR)
 
-# Build the fenoa and fenoa-fairydust bootc images, smoke-test them, push them to GHCR so
-# `bootc install` / `bootc switch` / `bootc upgrade` have something to pull, then cosign-sign them
-# (keyless, via GitHub OIDC). aarch64 runner: this stream's images are Apple Silicon / Fedora Asahi.
+# Build the fenoa bootc image, smoke-test it, push it to GHCR so `bootc install` / `bootc switch` /
+# `bootc upgrade` have something to pull, then cosign-sign it (keyless, via GitHub OIDC). x86_64
+# runner: main is the x86_64 stream (the asahi branch publishes Apple Silicon's).
 #
 # fenoa is one multi-arch name: each stream publishes its own architecture's image under an arch tag
 # and then points fenoa:44 and :latest at an index of the newest image of each (images/publish-index.sh),
 # so bootc on any machine pulls fenoa:44 and gets its own.
 #
 #   ghcr.io/<owner>/fenoa:44             index of :44-amd64 and :44-arm64
-#   ghcr.io/<owner>/fenoa:44-arm64       this stream's image (Hyprland + Noctalia, stock Asahi kernel-16k)
-#   ghcr.io/<owner>/fenoa-fairydust:44   the same with the fairydust kernel, FROM fenoa (arm64 only)
+#   ghcr.io/<owner>/fenoa:44-amd64       this stream's image (Hyprland + Noctalia, x86_64)
 #
-# Also :44-<shortsha> (immutable, this stream's image) and :latest (fenoa: the index). The platform
-# stage is built as part of fenoa and never pushed on its own.
+# Also :44-<shortsha> (immutable, this stream's image) and :latest (the index). The platform stage is
+# built as part of fenoa and never pushed on its own.
 #
 # "Image e2e" calls this once install-to-disk, first boot and every smoke test have passed, for a
 # push to a stream branch, its weekly run or a manual run, never for a pull request; so it builds
@@ -29,14 +28,14 @@ permissions:
 
 jobs:
   publish:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     concurrency:
       group: publish-${{ github.ref }}
       cancel-in-progress: false
     env:
       FEDORA: "44"
-      ARCH: arm64
+      ARCH: amd64
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,7 +47,6 @@ jobs:
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           {
             echo "fenoa=ghcr.io/$owner/fenoa"
-            echo "fairydust=ghcr.io/$owner/fenoa-fairydust"
             sha="${{ github.sha }}"
             echo "sha=${sha::12}"
           } >> "$GITHUB_OUTPUT"
@@ -79,15 +77,6 @@ jobs:
           ./images/fenoa/hack/platform-smoke.sh "fenoa:$FEDORA"
           ./images/fenoa/hack/desktop-smoke.sh "fenoa:$FEDORA"
 
-      - name: Build fenoa-fairydust (FROM fenoa; kernel swap)
-        run: env ENGINE=podman FEDORA="$FEDORA" ./images/build.sh fairydust
-
-      - name: Smoke-test fenoa-fairydust
-        run: |
-          ./images/fairydust/hack/smoke.sh "fenoa-fairydust:$FEDORA"
-          KERNEL=fairydust ./images/fenoa/hack/platform-smoke.sh "fenoa-fairydust:$FEDORA"
-          ./images/fenoa/hack/desktop-smoke.sh "fenoa-fairydust:$FEDORA"
-
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
 
@@ -96,7 +85,6 @@ jobs:
         run: |
           set -euo pipefail
           fenoa="${{ steps.refs.outputs.fenoa }}"
-          fd="${{ steps.refs.outputs.fairydust }}"
           sha="${{ steps.refs.outputs.sha }}"
           push_tags() {          # push_tags <local> <remote-repo> <digestfile> <tag>...
             local local_tag="$1" repo="$2" df="$3" t
@@ -109,23 +97,18 @@ jobs:
           }
           # fenoa:$FEDORA and :latest are the multi-arch index, rebuilt by the index job below.
           push_tags "fenoa:$FEDORA"           "$fenoa" fenoa.digest "$FEDORA-$ARCH" "$FEDORA-$sha"
-          push_tags "fenoa-fairydust:$FEDORA" "$fd"    fd.digest    "$FEDORA" "$FEDORA-$sha" latest
-          {
-            echo "fenoa_ref=$fenoa@$(cat fenoa.digest)"
-            echo "fd_ref=$fd@$(cat fd.digest)"
-          } >> "$GITHUB_OUTPUT"
+          echo "fenoa_ref=$fenoa@$(cat fenoa.digest)" >> "$GITHUB_OUTPUT"
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
 
-      - name: Sign images (keyless)
+      - name: Sign the image (keyless)
         env:
           COSIGN_YES: "true"
         run: |
           # cosign (go-containerregistry) reads the docker config, not podman's auth.json.
           cosign login ghcr.io -u "${{ github.actor }}" -p "${{ secrets.GITHUB_TOKEN }}"
           cosign sign "${{ steps.push.outputs.fenoa_ref }}"
-          cosign sign "${{ steps.push.outputs.fd_ref }}"
 
       - name: Summary
         run: |
@@ -133,7 +116,6 @@ jobs:
             echo "### Published + signed"
             echo ""
             echo "- \`${{ steps.push.outputs.fenoa_ref }}\` (\`$FEDORA-$ARCH\`, \`$FEDORA-${{ steps.refs.outputs.sha }}\`)"
-            echo "- \`${{ steps.push.outputs.fd_ref }}\` (\`$FEDORA\`, \`$FEDORA-${{ steps.refs.outputs.sha }}\`, \`latest\`)"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Point fenoa:44 and :latest at the newest image of each architecture. Both streams' runs queue on

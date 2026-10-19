@@ -1,7 +1,7 @@
 name: Tests
 
-# Everything that runs without building an image: shellcheck, shell syntax, the hermetic unit tests
-# (test/unit.d) and the deploy/ library tests. Seconds, on a stock runner, on every push and PR.
+# Everything that runs without building an image: shellcheck, shell syntax and the hermetic unit
+# tests (test/unit.d). Seconds, on a stock runner, on every push and PR.
 on:
   push:
   pull_request:
@@ -24,8 +24,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends shellcheck
 
       # Only fail on actual errors; SC1090/SC1091 are dynamic `source` paths that cannot be followed.
-      # Sourced fragments (profile.d, deploy/lib) carry no shebang of their own purpose, so name the
-      # dialect for every file rather than infer it.
+      # Sourced fragments (profile.d) carry no shebang of their own purpose, so name the dialect for
+      # every file rather than infer it.
       - name: shellcheck (errors only)
         run: |
           shellcheck --version
@@ -44,5 +44,5 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends jq python3 lua5.4
 
-      - name: test/all (syntax + unit + deploy library tests)
+      - name: test/all (syntax + unit tests)
         run: ./test/all

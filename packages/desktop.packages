@@ -59,4 +59,4 @@ glycin-loaders
 nm-connection-editor        # VPN and advanced connection settings
 system-config-printer
 udiskie                     # automount removable drives (started from fenoa/autostart.lua)
-wf-recorder                 # screen recording; gpu-screen-recorder fails on the Asahi GPU
+wf-recorder                 # screen recording from a terminal; OBS (Flatpak) for anything more

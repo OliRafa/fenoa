@@ -2,22 +2,18 @@
 # Container smoke test for the Fenoa PLATFORM layer.
 #
 # Runs the built image as a container and asserts the userspace a correct build must produce —
-# WITHOUT booting. (The Fedora Asahi kernel only boots on real Apple Silicon, so a generic VM boot
-# test isn't possible; boot-time state is covered by images/boottest/, run on hardware.)
+# WITHOUT booting. Boot-time state is covered by images/boottest/, on a PC or in a VM.
 #
-# Every Fenoa image must pass this: the platform stage, the desktop image built on it, and the
-# fairydust variant (which swaps the kernel, so it skips the stock-kernel assertion).
+# Every Fenoa image must pass this: the platform stage and the desktop image built on it.
 #
 #   ./images/fenoa/hack/platform-smoke.sh [IMAGE]       # default fenoa-platform:44
-#   KERNEL=fairydust ./images/fenoa/hack/platform-smoke.sh fenoa-fairydust:44
 #   ENGINE=docker ./images/fenoa/hack/platform-smoke.sh
 set -euo pipefail
 IMAGE="${1:-fenoa-platform:44}"
 ENGINE="${ENGINE:-podman}"
-KERNEL="${KERNEL:-stock}"
 
-echo "== platform smoke: $IMAGE (via $ENGINE, kernel=$KERNEL) =="
-"$ENGINE" run --rm -i -e KERNEL="$KERNEL" --entrypoint bash "$IMAGE" -s <<'CHECKS'
+echo "== platform smoke: $IMAGE (via $ENGINE) =="
+"$ENGINE" run --rm -i --entrypoint bash "$IMAGE" -s <<'CHECKS'
 set -uo pipefail
 fail=0
 ok() { printf '  \033[32m✓\033[0m %s\n' "$1"; }
@@ -37,13 +33,10 @@ timer_only() {
 # Never `cmd | grep -q` here: under pipefail grep -q's early exit SIGPIPEs the producer and the
 # pipeline reports failure even on a match. Capture output first, then match in the shell.
 
-echo "== Fedora Asahi base (Apple Silicon) =="
-[[ $(uname -m) == "aarch64" ]] && ok "aarch64" || no "not aarch64: $(uname -m)"
-rpm -q asahi-platform-metapackage >/dev/null 2>&1 && ok "asahi-platform-metapackage" || no "asahi platform packages missing"
-if [[ $KERNEL == "stock" ]]; then
-  rpm -q kernel-16k >/dev/null 2>&1 && ok "kernel-16k (Asahi kernel)" || no "kernel-16k missing — wrong base"
-fi
-for p in asahi-audio speakersafetyd tiny-dfr widevine-installer update-m1n1; do
+echo "== Fedora base (x86_64) =="
+[[ $(uname -m) == "x86_64" ]] && ok "x86_64" || no "not x86_64: $(uname -m)"
+rpm -q kernel >/dev/null 2>&1 && ok "kernel (Fedora's)" || no "kernel missing — wrong base"
+for p in linux-firmware microcode_ctl amd-ucode-firmware fwupd mesa-vulkan-drivers libva-intel-media-driver; do
   rpm -q "$p" >/dev/null 2>&1 && ok "$p" || no "$p missing"
 done
 
@@ -51,53 +44,28 @@ echo "== kernel + bootloader =="
 n=$(find /usr/lib/modules -maxdepth 2 -name vmlinuz 2>/dev/null | wc -l)
 [[ $n == "1" ]] && ok "exactly one kernel in /usr/lib/modules" || no "expected 1 kernel in /usr/lib/modules, found $n"
 rpm -q systemd-boot-unsigned >/dev/null 2>&1 && ok "systemd-boot-unsigned installed" || no "systemd-boot-unsigned missing"
-# Non-fatal: anything held by asahi-platform-metapackage stays but is inert under
-# --bootloader systemd (the "no grub on the ESP" guarantee is the install-to-disk CI assertion).
-for p in rpm-ostree bootupd grub2-efi-aa64; do
-  rpm -q "$p" >/dev/null 2>&1 && echo "  - $p present (held by a dep; inert under systemd-boot)" || ok "$p removed"
+[[ -f /usr/lib/systemd/boot/efi/systemd-bootx64.efi ]] && ok "systemd-bootx64.efi for bootc to install" || no "systemd-bootx64.efi missing"
+# Nothing holds these on x86_64, so P3 removes them; a GRUB left behind would mean bootupd or a
+# grub2 package came back with a base or package-list change.
+for p in rpm-ostree bootupd grub2-common grub2-efi-x64 grub2-tools shim-x64; do
+  rpm -q "$p" >/dev/null 2>&1 && no "$p installed (the image boots systemd-boot)" || ok "$p removed"
 done
-for u in /etc/systemd/user/grub-boot-success.timer /etc/systemd/user/grub-boot-success.service \
-         /etc/systemd/system/grub-boot-indeterminate.service; do
-  [[ "$(readlink -f "$u")" == "/dev/null" ]] && ok "masked $(basename "$u")" || no "$(basename "$u") not masked (fails every boot under systemd-boot)"
+for u in /usr/lib/systemd/user/grub-boot-success.timer /usr/lib/systemd/system/grub-boot-indeterminate.service; do
+  [[ ! -e $u ]] && ok "no $(basename "$u") (it fails every boot under systemd-boot)" || no "$(basename "$u") ships"
 done
 rpm -q firefox >/dev/null 2>&1 && no "firefox still installed (the browser is a Flatpak)" || ok "native firefox removed"
 
-echo "== initramfs (composefs pivot + Apple HID early load) =="
+echo "== initramfs (composefs and ostree root pivots) =="
 kver="$(basename "$(dirname "$(find /usr/lib/modules -maxdepth 2 -name vmlinuz 2>/dev/null | head -1)")")"
 listing="$(lsinitrd "/usr/lib/modules/$kver/initramfs.img" 2>/dev/null || true)"
 case $listing in
   *bootc-root-setup.service*) ok "initramfs carries bootc-root-setup.service (composefs root pivot)" ;;
   *) no "initramfs has no bootc composefs root setup — a composefs install would boot the host's /usr" ;;
 esac
-builtin="$(cat "/usr/lib/modules/$kver/modules.builtin" 2>/dev/null || true)"
-for m in hid-apple hid-magicmouse; do
-  case $builtin in
-    *"/$m.ko"*) ok "$m built into the kernel" ;;
-    *)
-      case $listing in
-        *"/$m.ko"*) ok "$m in the initramfs (trackpad boot-race fix)" ;;
-        *) no "$m neither built in nor in the initramfs — the trackpad can come up dead" ;;
-      esac
-      ;;
-  esac
-done
-[[ -f /usr/lib/dracut/dracut.conf.d/90-fenoa-apple-hid.conf ]] && ok "dracut Apple HID drop-in" || no "dracut Apple HID drop-in missing"
-modprobe_conf="$(cat /usr/lib/modprobe.d/fenoa-apple.conf 2>/dev/null || true)"
-case $modprobe_conf in
-  *"options hid_apple fnmode=1"*) ok "hid_apple fnmode=1 (media keys first)" ;;
-  *) no "hid_apple fnmode not configured" ;;
+case $listing in
+  *ostree-prepare-root.service*) ok "initramfs carries ostree-prepare-root.service (a Fedora Atomic switched to Fenoa boots)" ;;
+  *) no "initramfs has no ostree-prepare-root — a system switched from Fedora Atomic would not boot" ;;
 esac
-
-echo "== Asahi m1n1 + devicetree on atomic =="
-dtbs="$(grep '^DTBS=' /etc/sysconfig/update-m1n1 2>/dev/null || true)"
-case $dtbs in
-  *'/usr/lib/modules/$(uname -r)/dtb'*) ok "update-m1n1 DTBS points at the image devicetree" ;;
-  *) no "update-m1n1 DTBS not repointed: ${dtbs:-unset}" ;;
-esac
-command -v update-m1n1 >/dev/null 2>&1 && ok "update-m1n1 present" || no "update-m1n1 missing"
-[[ -x /usr/libexec/fenoa-apply-m1n1 ]] && ok "fenoa-apply-m1n1 helper" || no "fenoa-apply-m1n1 missing"
-[[ -L /etc/systemd/system/multi-user.target.wants/fenoa-apply-m1n1.service ]] \
-  && ok "fenoa-apply-m1n1.service enabled" || no "fenoa-apply-m1n1.service not enabled"
 
 echo "== first-boot user provisioning =="
 [[ -x /usr/libexec/fenoa-firstboot-user ]] && ok "fenoa-firstboot-user helper" || no "fenoa-firstboot-user missing"
@@ -213,14 +181,12 @@ for f in /usr/lib/sysctl.d/99-fenoa-sysctl.conf /usr/lib/sysctl.d/90-fenoa-file-
          /usr/lib/udev/rules.d/60-fenoa-io-scheduler.rules /usr/lib/systemd/zram-generator.conf.d/90-fenoa.conf \
          /usr/lib/systemd/logind.conf.d/10-fenoa-power-button.conf /usr/lib/systemd/logind.conf.d/20-fenoa-inhibit-delay.conf \
          /usr/lib/systemd/oomd.conf.d/10-fenoa.conf /usr/lib/systemd/user/app.slice.d/10-fenoa-oomd.conf \
-         /usr/lib/NetworkManager/conf.d/50-fenoa-wifi-powersave.conf /usr/lib/tmpfiles.d/fenoa-zswap.conf \
-         /etc/docker/daemon.json; do
+         /usr/lib/tmpfiles.d/fenoa-zswap.conf /etc/docker/daemon.json; do
   [[ -f $f ]] && ok "$f" || no "$f missing"
 done
 [[ -x /usr/lib/systemd/system-sleep/fenoa-unmount-fuse ]] && ok "gvfs FUSE unmount sleep hook" || no "sleep hook missing or not executable"
 visudo -cf /etc/sudoers.d/fenoa-passwd-tries >/dev/null 2>&1 && ok "sudoers drop-in parses" || no "sudoers drop-in invalid"
 [[ "$(stat -c %a /etc/sudoers.d/fenoa-passwd-tries 2>/dev/null)" == "440" ]] && ok "sudoers drop-in is 0440" || no "sudoers drop-in mode is not 0440"
-[[ -x /usr/bin/fenoa-widevine ]] && ok "fenoa-widevine on PATH" || no "fenoa-widevine missing"
 
 echo "== first boot: the preset pass keeps every unit as built =="
 # A first boot makes systemd run a FULL `systemctl preset-all`: every unit is set to what the

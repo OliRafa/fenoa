@@ -1,6 +1,6 @@
 [Unit]
 Description=Fenoa boot smoke test (on-device only)
-After=multi-user.target greetd.service NetworkManager.service fenoa-apply-m1n1.service
+After=multi-user.target greetd.service NetworkManager.service
 Wants=greetd.service
 
 [Service]

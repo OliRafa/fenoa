@@ -1,7 +1,7 @@
 #!/bin/bash
-# Container smoke test for the Fenoa DESKTOP layer (the published `fenoa` image and the fairydust
-# variant). Run platform-smoke.sh against the same image as well; this file covers only what the
-# desktop stage adds.
+# Container smoke test for the Fenoa DESKTOP layer (the published `fenoa` image). Run
+# platform-smoke.sh against the same image as well; this file covers only what the desktop stage
+# adds.
 #
 # Beyond package presence it exercises the shipped configuration with the real binaries in the
 # image: Noctalia validates the seeded user config, Hyprland verifies the seeded Lua config, the

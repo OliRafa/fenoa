@@ -4,8 +4,8 @@
 #
 #   podman build -t fenoa:44-boottest --build-arg BASE=fenoa:44 -f images/boottest/Containerfile .
 #
-# Deploy the -boottest image on a real Mac (bootc switch, or deploy/fenoa-install) and read the
-# verdict from `journalctl -u fenoa-boottest`: "BOOT SMOKE: PASS".
+# Install the -boottest image on a PC or a UEFI VM (bootc install to-disk, or bootc switch) and read
+# the verdict from `journalctl -u fenoa-boottest`: "BOOT SMOKE: PASS".
 ARG BASE=fenoa:44
 FROM ${BASE}
 

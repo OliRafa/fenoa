@@ -5,33 +5,32 @@ How the Fenoa image is put together, and where each kind of file lives.
 ## Images and stages
 
 ```
-quay.io/fedora-asahi-remix-atomic-desktops/base-atomic:44   Asahi kernel-16k, firmware, m1n1/U-Boot, dracut, audio DSP
-  └─ images/fenoa/Containerfile  (stage: platform)          bootc plumbing for Apple Silicon — never published
-       └─ images/fenoa/Containerfile  (stage: desktop)      Hyprland + Noctalia + greeter  →  ghcr.io/olirafa/fenoa:44-arm64 (in the fenoa:44 index)
-            └─ images/fairydust/Containerfile               fairydust kernel swap          →  ghcr.io/olirafa/fenoa-fairydust
+quay.io/fedora-ostree-desktops/base-atomic:44   kernel, linux-firmware, microcode, Mesa, fwupd, dracut (x86_64)
+  └─ images/fenoa/Containerfile  (stage: platform)          bootc plumbing for x86_64 PCs — never published
+       └─ images/fenoa/Containerfile  (stage: desktop)      Hyprland + Noctalia + greeter  →  ghcr.io/olirafa/fenoa:44-amd64 (in the fenoa:44 index)
 ghcr.io/ublue-os/brew           → prebuilt Homebrew tree copied in by the platform stage
 images/fenoa/Containerfile (stage: librepods) → the AirPods plugin's daemon, built from a pinned commit of
                                   github.com/harveywuk/librepods and copied in by the desktop stage
 github.com/akitaonrails/ai-usagebar releases → the AI Usage plugin's CLI, signature-checked, copied in by the desktop stage
-ghcr.io/olirafa/omarchy-fairydust-kernel → /usr/lib/modules/<kver> copied in by the fairydust image
 ```
 
-The split follows one rule: the **platform** stage holds everything a non-graphical Fedora Asahi bootc install needs (boot, firmware, drivers, system services, provisioning); the **desktop** stage holds everything that exists for the Hyprland/Noctalia session. `./images/build.sh platform` builds the platform stage on its own, and CI smoke-tests it before building the desktop on top.
+`fenoa:44` is a multi-arch index: this branch publishes `fenoa:44-amd64`, the `asahi` branch (Fedora Asahi Remix, Apple Silicon) publishes `fenoa:44-arm64`, and each stream's publish points `fenoa:44` and `latest` at the newest image of both (`images/publish-index.sh`).
 
-### platform (`images/fenoa/Containerfile`, steps P1–P10)
+The split follows one rule: the **platform** stage holds everything a non-graphical Fedora bootc install needs (boot, firmware, drivers, system services, provisioning); the **desktop** stage holds everything that exists for the Hyprland/Noctalia session. `./images/build.sh platform` builds the platform stage on its own, and CI smoke-tests it before building the desktop on top.
+
+### platform (`images/fenoa/Containerfile`, steps P1–P9)
 
 | Step | What | Why |
 |---|---|---|
-| P1 | `packages/platform.packages` | system services, Asahi extras (tiny-dfr, widevine-installer, Honeykrisp: already in the base, listed so they stay), Docker, base CLI, zsh (new accounts' login shell) |
+| P1 | `packages/platform.packages` | system services, systemd-boot, the Vulkan and Intel VA-API drivers (already in the base, listed so they stay), Docker, base CLI, zsh (new accounts' login shell) |
 | P2 | remove Firefox | the browser is a Flatpak |
-| P3 | systemd-boot; drop rpm-ostree/bootupd/GRUB; mask grub boot-success units | composefs + systemd-boot install; see [asahi.md](asahi.md) |
-| P4 | `COPY system/platform/ /` | units, helpers, tuning drop-ins, Apple HID modprobe/dracut config |
-| P5 | rebuild the initramfs with the `bootc` dracut module | composefs pivot; Apple HID drivers loaded early |
-| P6 | `DTBS` → image devicetree; enable `fenoa-apply-m1n1` | m1n1/devicetree refresh on atomic |
-| P7 | enable `fenoa-firstboot-user` (`systemd-firstboot` is static and needs no enabling) | the image ships no user |
-| P8 | ublue brew tree + Brewfile; baked Flathub remote; enable the provisioning units (the Flatpak preinstall and the Brewfile setup through their timers) | `/var` is seeded only on first boot; see [Provisioning and the network](#provisioning-and-the-network) |
-| P9 | enable system services; mask NetworkManager-wait-online; disable sshd and drop `ssh` from the default firewalld zone | nothing in the boot waits for the network (the units that need it check for themselves); SSH is opt-in, and `50-fenoa.preset` keeps a preset pass from re-enabling sshd |
-| P10 | `/etc/machine-id` = `uninitialized`; clean residue; `bootc container lint` | systemd detects each install's first boot (an empty file does not count), so systemd-firstboot runs |
+| P3 | systemd-boot; remove rpm-ostree, bootupd, GRUB and shim (and with them GRUB's boot-success units); fail if any survive | composefs + systemd-boot install; see [platform.md](platform.md) |
+| P4 | `COPY system/platform/ /` | units, helpers, tuning drop-ins |
+| P5 | rebuild the initramfs with the `bootc` and `ostree` dracut modules | composefs pivot for an install, ostree pivot for a Fedora Atomic switched to Fenoa |
+| P6 | enable `fenoa-firstboot-user` (`systemd-firstboot` is static and needs no enabling) | the image ships no user |
+| P7 | ublue brew tree + Brewfile; baked Flathub remote; enable the provisioning units (the Flatpak preinstall and the Brewfile setup through their timers) | `/var` is seeded only on first boot; see [Provisioning and the network](#provisioning-and-the-network) |
+| P8 | enable system services; mask NetworkManager-wait-online; disable sshd and drop `ssh` from the default firewalld zone | nothing in the boot waits for the network (the units that need it check for themselves); SSH is opt-in, and `50-fenoa.preset` keeps a preset pass from re-enabling sshd |
+| P9 | `/etc/machine-id` = `uninitialized`; clean residue; `bootc container lint` | systemd detects each install's first boot (an empty file does not count), so systemd-firstboot runs |
 
 ### desktop (steps D1–D6)
 
@@ -46,10 +45,6 @@ The split follows one rule: the **platform** stage holds everything a non-graphi
 | D5 | enable greetd (it aliases `display-manager.service`); default to `graphical.target` |
 | D6 | `/etc/machine-id` = `uninitialized` again, in case anything D3 installed wrote an ID; clean residue; `bootc container lint` |
 
-### fairydust (`images/fairydust/Containerfile`, F1–F3)
-
-Copies the fairydust kernel tree in, removes every other kernel, runs `depmod`, and rebuilds the initramfs exactly like P5. See [fairydust.md](fairydust.md).
-
 ## Where files go
 
 | Path | Owner | Notes |
@@ -58,7 +53,7 @@ Copies the fairydust kernel tree in, removes every other kernel, runs `depmod`, 
 | `/etc/sudoers.d`, `/etc/docker/daemon.json`, `/etc/cups/cups-browsed.conf`, `/etc/greetd/config.toml`, `/etc/xdg-desktop-portal/hyprland-portals.conf`, `/etc/xdg/*` | image, merged | only where the consumer reads nothing else; `/etc` is three-way merged on upgrade, so a local edit sticks |
 | `/usr/share/fenoa/hypr`, `/usr/share/fenoa/noctalia`, `/usr/share/fenoa/greeter` | image | desktop defaults, pulled in by the user's config |
 | `/etc/skel/.config/{hypr,noctalia}` | image → user | thin files seeded into a new home that load the `/usr/share/fenoa` defaults |
-| `/var/lib/fenoa` | runtime | first-boot markers and the m1n1 stamp |
+| `/var/lib/fenoa` | runtime | first-boot markers |
 | `/var/lib/noctalia-greeter` | runtime (tmpfiles) | greeter state; `greeter.toml` is a link back into `/usr/share/fenoa/greeter` |
 | `/var/lib/flatpak`, `/home/linuxbrew` | runtime | Flatpak apps and the Homebrew prefix, provisioned on first boot and updated on their own timers |
 
@@ -86,13 +81,13 @@ Each `hyprctl reload` runs the config in a fresh Lua state, so `require` loads t
 ## Boot and session flow
 
 ```
-m1n1 → U-Boot → systemd-boot → kernel + initramfs (bootc composefs pivot, hid_apple loaded)
+UEFI firmware → systemd-boot → kernel + initramfs (bootc composefs pivot)
   → first boot only (/etc/machine-id ships "uninitialized"): full preset pass, then on tty1
       systemd-firstboot (locale, keymap, timezone) and fenoa-firstboot-user (the account, zsh as its shell)
   → greetd → fenoa-greeter-session (XKB_DEFAULT_* from fenoa/keyboard.lua) → noctalia-greeter-session
       (bundled wlroots compositor) → PAM (/etc/pam.d/greetd, keyring unlock)
   → uwsm start hyprland.desktop → Hyprland → uwsm-app noctalia
-background: fenoa-apply-m1n1, brew-setup (unpacks Homebrew)
+background: brew-setup (unpacks Homebrew)
 timers, once the network is up: fenoa-flatpak-preinstall, fenoa-brew-setup (30s after boot, then every 2 min until the hosts each needs answer)
 ```
 

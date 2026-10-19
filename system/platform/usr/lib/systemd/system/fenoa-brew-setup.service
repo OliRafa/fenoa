@@ -30,8 +30,8 @@ RemainAfterExit=yes
 ExecCondition=/usr/bin/bash -c '[[ -f /var/lib/fenoa/brew-setup-done ]] || exec /usr/libexec/fenoa-online formulae.brew.sh ghcr.io'
 # A `brew bundle` that fails with the network up (a formula that does not build, a download that
 # broke off) is retried after a growing delay, 5 minutes up to 2 hours over five tries, not every 2
-# minutes for the rest of the boot: some aarch64 formulae build from source. A skip by the condition
-# above is not a failure, so it never restarts; the timer covers that.
+# minutes for the rest of the boot: a formula without a bottle builds from source. A skip by the
+# condition above is not a failure, so it never restarts; the timer covers that.
 #
 # RestartMode=direct keeps the unit "activating" between tries. Without it each failure leaves the
 # unit inactive for an instant, the timer's OnUnitInactiveSec= arms, and 2 minutes later its start
@@ -43,6 +43,6 @@ RestartMode=direct
 RestartSec=5min
 RestartSteps=5
 RestartMaxDelaySec=2h
-# brew bundle can take a while on first boot (some aarch64 formulae build from source).
+# brew bundle can take a while on first boot (a formula without a bottle builds from source).
 TimeoutStartSec=infinity
 ExecStart=/usr/libexec/fenoa-brew-setup

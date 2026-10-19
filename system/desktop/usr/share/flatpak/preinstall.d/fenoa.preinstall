@@ -14,7 +14,7 @@
 #
 # Kept deliberately lean; install anything else with `flatpak install flathub <app>`.
 
-# Browser. Run `fenoa-widevine` after its first start to enable DRM (Spotify, Netflix) on aarch64.
+# Browser. It fetches the Widevine DRM module (Spotify, Netflix) itself when DRM is first needed.
 [Flatpak Preinstall com.brave.Browser]
 Branch=stable
 IsRuntime=false

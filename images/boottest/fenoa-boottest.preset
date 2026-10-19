@@ -1,3 +1,3 @@
-# The boot test runs on hardware; deployed with deploy/fenoa-install, its first boot runs a full
-# preset pass, which would disable a unit no preset lists (see 50-fenoa.preset).
+# The boot test runs on a booted install, whose first boot runs a full preset pass, which would
+# disable a unit no preset lists (see 50-fenoa.preset).
 enable fenoa-boottest.service

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Everything that runs without an image build: shell syntax, the unit tests, and the deploy/ library
-# tests. The image smoke tests (images/*/hack/) need a built image and run in CI's image-e2e job.
+# Everything that runs without an image build: shell syntax and the unit tests. The image smoke
+# tests (images/*/hack/) need a built image and run in CI's image-e2e job.
 
 set -euo pipefail
 
@@ -17,12 +17,6 @@ done < <("$ROOT/test/shell-files")
 
 echo "==> test/unit"
 "$ROOT/test/unit" || status=1
-
-echo "==> deploy/tests"
-for t in "$ROOT"/deploy/tests/*.test.sh; do
-  printf -- '--> %s\n' "${t#"$ROOT"/}"
-  bash "$t" || status=1
-done
 
 if (( status == 0 )); then
   echo

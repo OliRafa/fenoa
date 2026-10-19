@@ -1,28 +1,29 @@
-# Fenoa — Fedora Noctalia Atomic (Fedora Asahi Remix · Apple Silicon / aarch64)
+# Fenoa — Fedora Noctalia Atomic (Fedora · x86_64 PCs)
 #
 # Two stages, built in order:
 #
-#   platform  Fedora Asahi base-atomic + everything Apple Silicon needs to run as a bootc OS:
-#             systemd-boot, a composefs-capable initramfs, m1n1/devicetree refresh, first-boot user
-#             creation, Flatpak/Homebrew provisioning, system tuning. No desktop. Built and
-#             smoke-tested in CI (`--target platform`), never published on its own.
+#   platform  Fedora base-atomic + everything a PC needs to run as a bootc OS: systemd-boot, a
+#             composefs-capable initramfs, first-boot user creation, Flatpak/Homebrew provisioning,
+#             system tuning. No desktop. Built and smoke-tested in CI (`--target platform`), never
+#             published on its own.
 #   desktop   FROM platform: Hyprland + Noctalia shell + noctalia-greeter (greetd). This is the
-#             published `fenoa` image. images/fairydust/Containerfile swaps its kernel.
+#             published `fenoa` image (fenoa:44-amd64, in the multi-arch fenoa:44).
 #
 # Two helper stages only supply files: `brew` (Universal Blue's prebuilt Homebrew tree, for platform)
 # and `librepods` (builds the AirPods plugin's daemon, for desktop).
 #
-# Build on a native aarch64 host (see images/build.sh):
+# Apple Silicon is the asahi branch's stream, built on Fedora Asahi Remix; this file targets x86_64
+# only (see images/build.sh):
 #   ./images/build.sh platform     # -> fenoa-platform:44 (local only)
 #   ./images/build.sh fenoa        # -> fenoa:44
 
-ARG BASE=quay.io/fedora-asahi-remix-atomic-desktops/base-atomic
+ARG BASE=quay.io/fedora-ostree-desktops/base-atomic
 ARG FEDORA=44
 
 # Homebrew comes from Universal Blue's brew image — the same one Bluefin and Bazzite consume. It is
 # a `FROM scratch` context image holding only /system_files: a prebuilt, zstd-compressed Homebrew
 # tree at /usr/share/homebrew.tar.zst plus the units and shell hooks that manage it. Built for both
-# amd64 and arm64, so the aarch64 tree we need is the one we get.
+# amd64 and arm64; the build pulls the one for its own architecture.
 #
 # Taking the prebuilt tree rather than running Homebrew's installer at first boot is the point:
 # every brew failure seen on this platform was a first-boot network failure, and one was invisible
@@ -64,10 +65,11 @@ RUN set -eux; \
 # ==================================================================================================
 FROM ${BASE}:${FEDORA} AS platform
 
-# P1) Platform packages. The base already carries the Asahi kernel (kernel-16k), Apple firmware,
-#     m1n1/U-Boot glue, dracut and the Asahi audio DSP stack; packages/platform.packages adds the
-#     system services. Inline comments and blank lines are stripped. Fedora mirrors flake often
-#     enough on CI to retry (clean metadata + linear backoff) before giving up.
+# P1) Platform packages. The base already carries the kernel, linux-firmware (GPU, Wi-Fi, Bluetooth
+#     and audio firmware, split by vendor), CPU microcode, fwupd, Mesa and dracut;
+#     packages/platform.packages adds the system services. Inline comments and blank lines are
+#     stripped. Fedora mirrors flake often enough on CI to retry (clean metadata + linear backoff)
+#     before giving up.
 COPY packages/platform.packages /tmp/platform.packages
 RUN retry() { n=1; while ! "$@"; do [ "$n" -ge 5 ] && return 1; echo "[dnf-retry] attempt $n failed: $*"; dnf clean all || true; sleep $((n*5)); n=$((n+1)); done; }; \
     retry dnf -y install $(sed 's/#.*//' /tmp/platform.packages | awk 'NF') \
@@ -83,40 +85,34 @@ RUN { dnf -y remove firefox firefox-langpacks 2>/dev/null || true; } \
     done \
  && dnf clean all
 
-# P3) Bootloader: systemd-boot; drop the tooling we don't use.
-#     - bootc selects systemd-boot when bootupd is ABSENT (and we pass --bootloader systemd at
-#       install). bootupd manages GRUB/shim only — never systemd-boot — so it's unused here.
+# P3) Bootloader: systemd-boot; drop GRUB, shim, bootupd and rpm-ostree.
+#     - bootc installs systemd-boot when told to (`--bootloader systemd`, the install docs/platform.md
+#       describes). bootupd manages GRUB/shim only, never systemd-boot, so it and the GRUB and shim
+#       payloads it installs from have no job here.
 #     - rpm-ostree is package layering; the composefs backend uses composefs-rs, not rpm-ostree.
-#     Removal is best-effort: anything held by asahi-platform-metapackage stays but is inert
-#     (--bootloader systemd is authoritative). On Asahi the chain is m1n1 → U-Boot (UEFI) →
-#     /EFI/BOOT/BOOTAA64.EFI (systemd-boot) → kernel; the devicetree comes from m1n1, not here.
-#
-#     Then mask grub2's boot-success units. They ship with grub2-common — which survives because
-#     asahi-platform-metapackage holds it — and record a successful boot by writing a grubenv via
-#     grub2-editenv. Under systemd-boot there is no grubenv, so they fail and the desktop reports
-#     "Failed unit detected: grub-boot-success.service" on every login. `systemctl mask` works on
-#     units that do not exist, so this is safe if grub2-common ever goes.
+#     Fedora marks GRUB and shim as protected (/etc/dnf/protected.d), so dnf refuses to remove them
+#     unless that list is cleared for the command; nothing else in the image needs them (os-prober
+#     goes with grub2-tools). grub2-common's boot-success units go too: they record a boot in a
+#     grubenv, and under systemd-boot they would fail on every login. The build fails if any of it
+#     survives. systemd-boot-unsigned carries no Secure Boot signature, so Fenoa boots with Secure
+#     Boot off (docs/platform.md).
 RUN set -eux; \
-    { dnf -y remove rpm-ostree bootupd grub2-efi-aa64 grub2-efi-aa64-modules 2>/dev/null || true; }; \
-    for p in rpm-ostree bootupd grub2-efi-aa64; do \
-      rpm -q "$p" >/dev/null 2>&1 && echo "[P3] KEPT (held by a dependency): $p" || echo "[P3] removed: $p"; \
-    done; \
+    dnf -y remove --setopt=protected_packages= rpm-ostree bootupd 'grub2-*' 'shim-*'; \
     dnf clean all; \
-    systemctl --global mask grub-boot-success.timer grub-boot-success.service; \
-    systemctl mask grub-boot-indeterminate.service; \
-    for u in /etc/systemd/user/grub-boot-success.timer \
-             /etc/systemd/user/grub-boot-success.service \
-             /etc/systemd/system/grub-boot-indeterminate.service; do \
-      [ "$(readlink -f "$u")" = /dev/null ] || { echo "[P3] $u is not masked"; exit 1; }; \
+    for p in rpm-ostree bootupd grub2-common grub2-efi-x64 grub2-tools shim-x64; do \
+      if rpm -q "$p" >/dev/null 2>&1; then echo "[P3] $p is still installed"; exit 1; fi; \
+    done; \
+    for u in /usr/lib/systemd/user/grub-boot-success.timer /usr/lib/systemd/system/grub-boot-indeterminate.service; do \
+      [ ! -e "$u" ] || { echo "[P3] $u survived the GRUB removal"; exit 1; }; \
     done
 
-# P4) The platform overlay: first-boot/m1n1/provisioning units and helpers, system tuning drop-ins,
-#     the Apple HID modprobe/dracut configuration, and 50-fenoa.preset, which lists every unit this
-#     stage enables or disables so a first boot's preset pass keeps them. Copied AFTER the package
-#     install so the packages' %config files (cups-browsed.conf) are replaced rather than left as
-#     .rpmnew, and BEFORE P5 so the initramfs picks up the dracut and modprobe drop-ins.
+# P4) The platform overlay: first-boot/provisioning units and helpers, system tuning drop-ins, and
+#     50-fenoa.preset, which lists every unit this stage enables or disables so a first boot's preset
+#     pass keeps them. Copied AFTER the package install so the packages' %config files
+#     (cups-browsed.conf) are replaced rather than left as .rpmnew, and BEFORE P5 so the initramfs
+#     would pick up any dracut or modprobe drop-in added here.
 COPY system/platform/ /
-RUN chmod 0755 /usr/libexec/fenoa-* /usr/bin/fenoa-* /usr/lib/systemd/system-sleep/fenoa-* \
+RUN chmod 0755 /usr/libexec/fenoa-* /usr/lib/systemd/system-sleep/fenoa-* \
  && chmod 0440 /etc/sudoers.d/fenoa-* \
  && visudo -cf /etc/sudoers.d/fenoa-passwd-tries
 
@@ -125,20 +121,22 @@ RUN chmod 0755 /usr/libexec/fenoa-* /usr/bin/fenoa-* /usr/lib/systemd/system-sle
 #     gated on ConditionKernelCommandLine=ostree and nothing that reads `composefs=`. Install with
 #     --composefs-backend against that and the boot entry carries composefs=<digest> that no
 #     initramfs component consumes — the kernel mounts root= directly and you boot the IMAGE's kernel
-#     against whatever /usr is already on the disk (observed on hardware: emergency mode).
+#     against whatever /usr is already on the disk (seen on hardware: emergency mode).
 #
 #     bootc ships /usr/lib/dracut/modules.d/51bootc (module `bootc`) which installs
 #     /usr/lib/bootc/initramfs-setup + bootc-root-setup.service. Rebuild
 #     /usr/lib/modules/<kver>/initramfs.img with it — exactly what the composefs install copies to
-#     <ESP>/EFI/Linux/bootc_composefs-<digest>/initrd — and FAIL the build if the result lacks the
-#     unit, or lacks the Apple HID drivers usr/lib/dracut/dracut.conf.d/90-fenoa-apple-hid.conf
-#     forces in (the trackpad boot race fix; see docs/asahi.md).
+#     <ESP>/EFI/Linux/bootc_composefs-<digest>/initrd. dracut includes neither it nor ostree's module
+#     unless named (both checks return 255), so name both: the ostree module keeps the ostree backend
+#     booting, for a Fedora Atomic install that `bootc switch`es to Fenoa and keeps its GRUB and
+#     ostree layout. Each pivot runs only for its own command line (ostree-prepare-root with ostree=,
+#     bootc-root-setup with composefs=). FAIL the build if the result lacks either unit.
 #
 #     DRACUT_NO_XATTR / DRACUT_NO_MKNOD: dracut sets these itself when it detects a container; that
 #     detection does not fire here, and the xattr copy failures would otherwise log once per file.
 #     /var/roothome: /root is a symlink to var/roothome and /var is empty in the image, so
 #     dracut-install dies on the dangling link; create it for the run only, keeping /var empty for
-#     `bootc container lint`. images/fairydust/Containerfile repeats this step for its kernel.
+#     `bootc container lint`.
 RUN set -eux; \
     export DRACUT_NO_XATTR=1 DRACUT_NO_MKNOD=1; \
     kver="$(basename "$(dirname "$(find /usr/lib/modules -maxdepth 2 -name vmlinuz | head -1)")")"; \
@@ -148,46 +146,28 @@ RUN set -eux; \
     echo "[P5] rebuilding initramfs for $kver with dracut module '$modname' ($moddir)"; \
     if [ -e /var/roothome ]; then roothome_made=0; else mkdir -p /var/roothome; roothome_made=1; fi; \
     dracut --force --no-hostonly --reproducible --kver "$kver" \
-      --add "$modname" "/usr/lib/modules/$kver/initramfs.img"; \
+      --add "$modname ostree" "/usr/lib/modules/$kver/initramfs.img"; \
     if [ "$roothome_made" = 1 ]; then rmdir /var/roothome; fi; \
     { set +x; } 2>/dev/null; \
     contents="$(lsinitrd "/usr/lib/modules/$kver/initramfs.img")"; \
-    echo "$contents" | grep -q 'bootc-root-setup\.service' \
-      || { echo "[P5] rebuilt initramfs lacks bootc-root-setup.service"; exit 1; }; \
-    for m in hid-apple hid-magicmouse; do \
-      if grep -q "/$m\.ko" "/usr/lib/modules/$kver/modules.builtin"; then echo "[P5] $m is built in"; continue; fi; \
-      echo "$contents" | grep -q "/$m\.ko" || { echo "[P5] initramfs lacks $m.ko (Apple HID early load)"; exit 1; }; \
+    for u in bootc-root-setup ostree-prepare-root; do \
+      echo "$contents" | grep -q "$u\.service" || { echo "[P5] rebuilt initramfs lacks $u.service"; exit 1; }; \
     done; \
-    echo "[P5] initramfs carries bootc composefs root setup + Apple HID drivers"
+    echo "[P5] initramfs carries the composefs and ostree root setup"
 
-# P6) Asahi + atomic: update-m1n1 is a MANUAL step on bootc, and by default reads the STATIC
-#     devicetree in /boot rather than the image's — so a kernel devicetree change (the 6.19 USB DT,
-#     the fairydust DP-alt DT) boots stale and breaks hardware. Point DTBS at the image's devicetree
-#     (update-m1n1 globs $DTBS/apple/t*.dtb) and enable fenoa-apply-m1n1.service, which runs
-#     update-m1n1 once per kernel. It only runs on a boot that came through m1n1 (the unit's
-#     ConditionPathExists on the devicetree node m1n1 sets).
-RUN set -eux; \
-    mkdir -p /etc/sysconfig; f=/etc/sysconfig/update-m1n1; touch "$f"; \
-    if grep -q '^DTBS=' "$f"; then \
-      sed -i 's|^DTBS=.*|DTBS="/usr/lib/modules/$(uname -r)/dtb"|' "$f"; \
-    else \
-      printf 'DTBS="/usr/lib/modules/$(uname -r)/dtb"\n' >>"$f"; \
-    fi; \
-    systemctl enable fenoa-apply-m1n1.service
-
-# P7) First-boot user provisioning. The image ships no human user and a composefs
+# P6) First-boot user provisioning. The image ships no human user and a composefs
 #     `to-existing-root` convert does NOT import the underlying OS's user, so the greeter would have
 #     no account to offer. fenoa-firstboot-user creates the primary user once (preseed via
 #     /etc/fenoa/firstboot-user.conf, else an interactive tty1 prompt), ordered before the display
 #     manager. Before it, systemd-firstboot asks on tty1 for the locale, the keymap and the
 #     timezone. That one is a static unit (sysinit.target wants it) that runs only on a first boot,
-#     which the "uninitialized" /etc/machine-id written in P10 makes systemd detect, so there is
+#     which the "uninitialized" /etc/machine-id written in P9 makes systemd detect, so there is
 #     nothing to enable. It asks for no root password: the image's /etc/shadow already has a root
 #     entry ("*", locked), which it treats as configured; the user created next is in wheel.
 RUN set -eux; \
     systemctl enable fenoa-firstboot-user.service
 
-# P8) Homebrew + Flatpak first-boot provisioning. Neither can live in /usr as a working install:
+# P7) Homebrew + Flatpak first-boot provisioning. Neither can live in /usr as a working install:
 #     Homebrew needs a writable prefix owned by a human user, and Flatpaks live in /var/lib/flatpak,
 #     which bootc only seeds on first boot.
 #
@@ -205,7 +185,7 @@ RUN set -eux; \
 #     Fedora's stable remote itself, below Flathub, for the one app Flathub lacks on aarch64 (OBS).
 #
 #     The Brewfile and the Flatpak app set install from TIMERS, not from multi-user.target.
-#     NetworkManager-wait-online is masked (P9), so a boot-time start runs before Wi-Fi is up: `brew
+#     NetworkManager-wait-online is masked (P8), so a boot-time start runs before Wi-Fi is up: `brew
 #     bundle` fails, and offline `flatpak preinstall` exits 0 having installed nothing.
 #     fenoa-flatpak-preinstall.timer and fenoa-brew-setup.timer start their service 30s after boot
 #     and again every 2 minutes while its fenoa-online condition skips it (the hosts it needs do not
@@ -214,20 +194,20 @@ RUN set -eux; \
 COPY --from=brew /system_files/ /
 COPY Brewfile /usr/share/fenoa/Brewfile
 RUN set -eux; \
-    [ -s /usr/share/homebrew.tar.zst ] || { echo "[P8] brew image shipped no homebrew.tar.zst"; exit 1; }; \
-    command -v flatpak >/dev/null || { echo "[P8] flatpak (for the preinstall CLI) not installed"; exit 1; }; \
+    [ -s /usr/share/homebrew.tar.zst ] || { echo "[P7] brew image shipped no homebrew.tar.zst"; exit 1; }; \
+    command -v flatpak >/dev/null || { echo "[P7] flatpak (for the preinstall CLI) not installed"; exit 1; }; \
     mkdir -p /etc/flatpak/remotes.d; \
     curl --retry 3 --retry-delay 2 -fL -o /etc/flatpak/remotes.d/flathub.flatpakrepo \
       https://dl.flathub.org/repo/flathub.flatpakrepo; \
-    [ -s /etc/flatpak/remotes.d/flathub.flatpakrepo ] || { echo "[P8] failed to bake flathub.flatpakrepo"; exit 1; }; \
+    [ -s /etc/flatpak/remotes.d/flathub.flatpakrepo ] || { echo "[P7] failed to bake flathub.flatpakrepo"; exit 1; }; \
     systemctl mask flatpak-add-fedora-repos.service; \
     systemctl enable fenoa-flatpak-preinstall.timer fenoa-flatpak-update.timer fenoa-brew-setup.timer; \
     systemctl enable brew-setup.service brew-update.timer brew-upgrade.timer
 
-# P9) System services. Nothing in the session needs to block on the network, so mask
+# P8) System services. Nothing in the session needs to block on the network, so mask
 #     NetworkManager-wait-online and let network-online.target pass without waiting for DHCP/Wi-Fi
 #     association; the units that need the network wait for it themselves instead (fenoa-online
-#     conditions, retried from timers; P8). systemd-oomd's [Install] pulls in systemd-oomd.socket,
+#     conditions, retried from timers; P7). systemd-oomd's [Install] pulls in systemd-oomd.socket,
 #     which the user manager reports app.slice candidacy over.
 #
 #     SSH is opt-in. Fedora presets sshd enabled and its default firewalld zone allows ssh, so a
@@ -247,13 +227,13 @@ RUN set -eux; \
       firewall-offline-cmd --zone="$zone" --remove-service-from-zone=ssh; \
     fi; \
     if firewall-offline-cmd --zone="$zone" --query-service=ssh; then \
-      echo "[P9] ssh is still allowed in the $zone zone"; exit 1; \
+      echo "[P8] ssh is still allowed in the $zone zone"; exit 1; \
     fi
 
-# P10) Ship /etc/machine-id as "uninitialized", then clear build residue and lint.
+# P9) Ship /etc/machine-id as "uninitialized", then clear build residue and lint.
 #
 #      machine-id(5): systemd treats a boot as the first one when /etc/machine-id is absent or reads
-#      "uninitialized"; the base image's EMPTY file does not count, and then systemd-firstboot (P7)
+#      "uninitialized"; the base image's EMPTY file does not count, and then systemd-firstboot (P6)
 #      never runs. bootc copies the image's /etc into a new install as is, so with this file the
 #      first boot of every install is detected: systemd-firstboot asks its questions, a full preset
 #      pass runs (50-fenoa.preset keeps every unit as built), and systemd then writes the real ID
@@ -280,12 +260,13 @@ RUN printf 'uninitialized\n' >/etc/machine-id \
 FROM platform AS desktop
 
 # D1) Repositories.
-#     - lionheartp/Hyprland COPR: the Asahi-safe Hyprland stack with the 0.55+ Lua config this image
-#       uses. priority=10 makes it win over Fedora for the Hyprland packages. It also carries
-#       GTK/Pango/Cairo builds and -git builds of Noctalia, the greeter and Quickshell: excluded, so
-#       GTK stays Fedora's and noctalia/noctalia-greeter can only come from Fedora/Terra (dnf would
-#       otherwise satisfy `noctalia-greeter` with the COPR's noctalia-greeter-git).
-#     - Terra: the only Fedora 44 aarch64 build of noctalia-greeter (noctalia itself is in Fedora).
+#     - lionheartp/Hyprland COPR: the Hyprland stack with the 0.55+ Lua config this image uses
+#       (built for x86_64 and aarch64). priority=10 makes it win over Fedora for the Hyprland
+#       packages. It also carries GTK/Pango/Cairo builds and -git builds of Noctalia, the greeter and
+#       Quickshell: excluded, so GTK stays Fedora's and noctalia/noctalia-greeter can only come from
+#       Fedora/Terra (dnf would otherwise satisfy `noctalia-greeter` with the COPR's
+#       noctalia-greeter-git).
+#     - Terra: noctalia-greeter, which Fedora does not package (noctalia itself is in Fedora).
 #       terra-release is bootstrapped without a signature check, as Terra documents; it installs the
 #       repo's signing key, so everything installed from it afterwards is verified (dnf5 imports the
 #       key for repomd checks only when allowed to, hence the explicit `makecache -y`). A dnf5 repo
@@ -334,7 +315,7 @@ RUN set -eux; \
     tag="${latest##*/}"; \
     case "$tag" in v[0-9]*) ;; *) echo "[D3b] no release tag in $latest"; exit 1 ;; esac; \
     url="$releases/download/$tag"; \
-    tarball=ai-usagebar-linux-aarch64.tar.gz; \
+    tarball="ai-usagebar-linux-$(uname -m).tar.gz"; \
     tmp="$(mktemp -d)"; \
     for f in "$tarball" "$tarball.sig" ai-usagebar-signing-key.asc; do \
       curl --retry 3 --retry-delay 2 -fsSL -o "$tmp/$f" "$url/$f"; \
@@ -374,9 +355,9 @@ RUN set -eux; \
 # D4) The desktop overlay: Hyprland defaults (/usr/share/fenoa/hypr) and Noctalia defaults
 #     (/usr/share/fenoa/noctalia) that the thin user configs in /etc/skel pull in; greetd + greeter
 #     config, its state-directory tmpfiles entry and SELinux label; the greeter-sync polkit rule; session
-#     environment, portal routing, default terminal and default apps; the Flatpak app set;
-#     Apple-keyboard helpers; and 50-fenoa-desktop.preset, which keeps greetd and graphical.target
-#     through a first boot's preset pass.
+#     environment, portal routing, default terminal and default apps; the Flatpak app set; the
+#     keyboard-backlight and lid helpers; and 50-fenoa-desktop.preset, which keeps greetd and
+#     graphical.target through a first boot's preset pass.
 #     Copied after the packages so /etc/greetd/config.toml replaces the package's agreety default.
 COPY system/desktop/ /
 RUN set -eux; \
@@ -405,7 +386,7 @@ RUN set -eux; \
     firewall-offline-cmd --zone="$zone" --add-service=localsend; \
     firewall-offline-cmd --zone="$zone" --query-service=localsend
 
-# D6) Ship /etc/machine-id as "uninitialized" again (see P10), in case anything D3 installed wrote an
+# D6) Ship /etc/machine-id as "uninitialized" again (see P9), in case anything D3 installed wrote an
 #     ID; clear build residue and lint.
 RUN printf 'uninitialized\n' >/etc/machine-id \
  && [ "$(cat /etc/machine-id)" = uninitialized ] \

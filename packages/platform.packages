@@ -1,24 +1,22 @@
-# Fenoa platform layer — Fedora/Asahi system packages layered onto
-# quay.io/fedora-asahi-remix-atomic-desktops/base-atomic. The base already carries the Asahi
-# kernel (kernel-16k), Apple firmware, m1n1/U-Boot glue, dracut, and the Asahi audio stack
-# (asahi-audio, speakersafetyd, the lv2 DSP plugins); this list adds what a bootc laptop OS needs
-# on top. No desktop here — packages/desktop.packages layers that.
+# Fenoa platform layer — Fedora system packages layered onto quay.io/fedora-ostree-desktops/base-atomic
+# (x86_64). The base already carries the kernel, linux-firmware (GPU, Wi-Fi, Bluetooth and audio
+# firmware, split by vendor), CPU microcode, fwupd, Mesa and dracut; this list adds what a bootc
+# laptop OS needs on top. No desktop here — packages/desktop.packages layers that.
 #
 # One package per line; text after `#` is ignored (images/fenoa/Containerfile strips it).
 
 # --- Boot: systemd-boot replaces GRUB on this image (see images/fenoa/Containerfile step P3) ---
 systemd-boot-unsigned
 
-# --- Apple Silicon extras. base-atomic 44 already ships all three (asahi-platform-metapackage-core
-# requires tiny-dfr and widevine-installer); listed so they stay should the base drop them ---
-tiny-dfr                    # Touch Bar function-row daemon (MacBook Pro 13" M1/M2)
-widevine-installer          # aarch64 Widevine CDM fetcher; see fenoa-widevine
-mesa-vulkan-drivers         # Honeykrisp (Asahi Vulkan); Arch's vulkan-asahi lives here on Fedora
+# --- Graphics (AMD and Intel; Fedora's Mesa also carries AMD's VA-API driver). base-atomic ships
+# both; listed so they stay should the base drop them ---
+mesa-vulkan-drivers         # RADV (AMD) and ANV (Intel) Vulkan
+libva-intel-media-driver    # VA-API video decode and encode for Intel (Broadwell and later)
 
 # --- Networking ---
 NetworkManager
 NetworkManager-tui
-wpa_supplicant              # NM's Wi-Fi backend on Fedora Asahi (brcmfmac); iwd is not used
+wpa_supplicant              # NM's Wi-Fi backend on Fedora; iwd is not used
 wireless-regdb
 firewalld
 avahi
@@ -27,7 +25,7 @@ nss-mdns
 # --- Bluetooth ---
 bluez
 
-# --- Audio (PipeWire; the Asahi DSP comes from asahi-audio in the base) ---
+# --- Audio (PipeWire; laptop DSP firmware such as Intel SOF comes with the base) ---
 pipewire-pulseaudio
 pipewire-alsa
 wireplumber

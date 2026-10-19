@@ -33,8 +33,8 @@ BREW="$PREFIX/bin/brew"
 # Primary user = lowest uid in the login.defs range with a real login shell. The bounds come from
 # login.defs — what useradd allocates from — not a hand-rolled 1000..65000: systemd's DynamicUser=
 # accounts sit at 61184-65519 and nss-systemd surfaces them in `getent passwd`. The nologin filter
-# happens to exclude today's (speakersafetyd on Asahi has /usr/sbin/nologin), but the range should
-# not depend on that.
+# happens to exclude the ones seen so far (speakersafetyd on Apple Silicon has /usr/sbin/nologin),
+# but the range should not depend on that.
 #
 # passwd fields are name:passwd:uid:gid:gecos:home:shell — the NAME is $1. Printing $2 yields the
 # password placeholder "x", which is the bug that once kept brew from ever installing.

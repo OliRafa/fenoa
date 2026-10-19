@@ -269,8 +269,8 @@ grep -q "applying .* as rafael" "$test_tmp/out.log" ||
   fail "the lowest uid in range is chosen" "$(cat "$test_tmp/out.log")"
 pass "the lowest uid in range is chosen"
 
-# A DynamicUser= account is not a human. speakersafetyd (Asahi speaker protection) lands at uid
-# 62454, which systemd allocates from 61184-65519 and nss-systemd surfaces in getent.
+# A DynamicUser= account is not a human. speakersafetyd (Apple Silicon speaker protection) lands at
+# uid 62454, which systemd allocates from 61184-65519 and nss-systemd surfaces in getent.
 reset; unpack
 DYNAMIC_USER=1 run_helper || fail "run alongside a DynamicUser account succeeds" "$(cat "$test_tmp/out.log")"
 grep -q "no primary user yet" "$test_tmp/out.log" ||
