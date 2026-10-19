@@ -28,6 +28,9 @@ permissions:
 
 jobs:
   publish:
+    # Only this branch's stream publishes from it: a manual run on another branch would push untested
+    # code under this architecture's tag and into the index every machine pulls.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     concurrency:

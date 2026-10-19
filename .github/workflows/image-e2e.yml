@@ -26,11 +26,11 @@ on:
     - cron: '0 6 * * 1'   # weekly: base-image, kernel and security updates; publish.yml follows on success
   workflow_dispatch:
 
-# A newer push to a pull request supersedes the run in progress. On a stream branch the run ends in a
-# publish, which must not be cut off halfway, so a newer run waits for it instead.
+# A newer push supersedes the run in progress, except on a stream branch (main, asahi): there the run
+# ends in a publish, which must not be cut off halfway, so a newer run waits for it instead.
 concurrency:
   group: image-e2e-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/asahi' }}
 
 jobs:
   e2e:
