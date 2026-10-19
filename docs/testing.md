@@ -32,7 +32,7 @@ CI: `.github/workflows/image-e2e.yml` on `ubuntu-24.04` (x86_64), building with 
 | `images/fenoa/hack/first-boot.sh` | platform stage; `fenoa` with `DESKTOP=1` | preseeded user creation under a populated machine-id and a DynamicUser account, zsh login shell and seeded `~/.zshrc`, marker, scrubbing, idempotence, skel seeding, `systemd-analyze verify` |
 | `images/fenoa/hack/install-to-disk.sh` | `fenoa` | real `bootc install to-disk --composefs-backend --bootloader systemd`, inspected by loop mount: systemd-boot on the ESP, no GRUB or shim there; the installed `/etc/machine-id` still reads `uninitialized`, so the first boot will be detected |
 
-This workflow ends by calling `publish.yml` once every step above has passed, for a push to a stream branch, its weekly run or a manual run (never a pull request): it builds that exact commit again and repeats the smoke tests on its own build before it pushes anything.
+On a stream branch (a push, its weekly run or a manual run; never a pull request) this workflow ends by pushing the image every step above tested as the immutable `fenoa:44-<sha>` and calling `publish.yml` with its digest, which tags that digest `fenoa:44-amd64`, signs it and rebuilds the `fenoa:44` index. Nothing is built twice, and what machines pull is byte for byte what passed these tests.
 
 ## 3. A real boot: `images/boottest/`
 
