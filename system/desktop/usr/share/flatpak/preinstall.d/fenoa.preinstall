@@ -8,9 +8,9 @@
 # flatpak default, "master", does not exist there and an unpinned group silently installs nothing);
 # the GTK3 theme extensions at the end have their own branch, 3.22.
 #
-# Each app comes from the first remote, by priority, that has it for aarch64: Flathub (priority 10),
-# then Fedora's Flatpak registry (priority 1) — set up by fenoa-flatpak-preinstall.service. A ref no
-# remote has is skipped silently, not retried.
+# Each app comes from Flathub, which fenoa-flatpak-preinstall.service adds at priority 10, so it
+# wins over any remote the machine already had (a Fedora Atomic switched to Fenoa has Fedora's). A
+# ref no remote has is skipped silently, not retried.
 #
 # Kept deliberately lean; install anything else with `flatpak install flathub <app>`.
 
@@ -45,8 +45,7 @@ IsRuntime=false
 Branch=stable
 IsRuntime=false
 
-# Screen recording and streaming. Flathub builds OBS for x86_64 only, so on Apple Silicon this
-# resolves to Fedora's Flatpak (fedora remote, org.fedoraproject.KDE6Platform runtime).
+# Screen recording and streaming.
 [Flatpak Preinstall com.obsproject.Studio]
 Branch=stable
 IsRuntime=false
@@ -62,8 +61,7 @@ IsRuntime=false
 # Nothing else installs them: flatpak's own auto-download fetches only the GTK theme active for the
 # user running it, and the preinstall and the daily update run as root, whose theme is plain
 # Adwaita. Both are listed because Noctalia switches between the two, and the one not yet used must
-# already be there when it does. Apps on Fedora's runtimes (OBS) take org.fedoraproject.Gtk3theme.*,
-# and Fedora ships no adw-gtk3-dark.
+# already be there when it does.
 [Flatpak Preinstall org.gtk.Gtk3theme.adw-gtk3]
 Branch=3.22
 IsRuntime=true

@@ -27,8 +27,8 @@ update_service="$units/fenoa-flatpak-update.service"
 update_timer="$units/fenoa-flatpak-update.timer"
 containerfile="$ROOT/images/fenoa/Containerfile"
 preset="$ROOT/system/platform/usr/lib/systemd/system-preset/50-fenoa.preset"
-online_check='ExecCondition=/usr/libexec/fenoa-online dl.flathub.org registry.fedoraproject.org'
-update_online_check='ExecCondition=/usr/libexec/fenoa-online --wait=300 dl.flathub.org registry.fedoraproject.org'
+online_check='ExecCondition=/usr/libexec/fenoa-online dl.flathub.org'
+update_online_check='ExecCondition=/usr/libexec/fenoa-online --wait=300 dl.flathub.org'
 
 for f in "$unit" "$timer" "$update_service" "$update_timer" "$containerfile" "$preset"; do
   [[ -f $f ]] || fail "ships ${f#"$ROOT"/}"
@@ -44,8 +44,8 @@ fi
 pass "the preinstall service is static: only its timer starts it"
 
 grep -qxF "$online_check" "$unit" ||
-  fail "the preinstall is skipped until both remotes answer (fenoa-online, no --wait)" "$(grep -n '^Exec' "$unit")"
-pass "the preinstall is skipped until dl.flathub.org and registry.fedoraproject.org answer"
+  fail "the preinstall is skipped until Flathub answers (fenoa-online, no --wait)" "$(grep -n '^Exec' "$unit")"
+pass "the preinstall is skipped until dl.flathub.org answers"
 
 # RemainAfterExit is what ends the timer's retries once a run succeeds; a failure is retried by the
 # timer, so Restart= would only add a second, faster retry loop.
@@ -88,15 +88,16 @@ grep -qE '^ExecStartPre=.*remote-add .*flathub https?:' "$unit" &&
   fail "Flathub must not be fetched over the network at boot" "$(grep -n Exec "$unit")"
 pass "Flathub is registered from the baked local file before preinstall runs"
 
-# Fedora's registry supplies what Flathub lacks on aarch64 (OBS). preinstall takes each app from the
-# first remote by priority and breaks ties alphabetically, so Flathub must outrank "fedora".
-grep -qE '^ExecStartPre=/usr/bin/flatpak remote-add --system --if-not-exists .*fedora oci\+https://registry\.fedoraproject\.org$' "$unit" ||
-  fail "Fedora's Flatpak registry is added as the fedora remote" "$(grep -n Exec "$unit")"
+# Flathub is the only remote added; every app in the set is on it. preinstall takes each app from the
+# first remote by priority and breaks ties alphabetically, and a Fedora Atomic switched to Fenoa
+# already has a "fedora" remote at the default priority 1, so Flathub has to be set above that.
+if grep -qE '^ExecStartPre=.*remote-add .*(fedora|registry\.fedoraproject\.org)' "$unit"; then
+  fail "no Fedora remote is added (Flathub carries the whole app set)" "$(grep -n Exec "$unit")"
+fi
 flathub_prio=$(sed -n 's/^ExecStartPre=.*remote-modify --system --prio=\([0-9]*\) flathub$/\1/p' "$unit")
-fedora_prio=$(sed -n 's/^ExecStartPre=.*remote-modify --system --prio=\([0-9]*\) fedora$/\1/p' "$unit")
-[[ -n $flathub_prio && -n $fedora_prio ]] || fail "both remote priorities are set" "$(grep -n prio "$unit")"
-(( flathub_prio > fedora_prio )) || fail "Flathub outranks Fedora ($flathub_prio vs $fedora_prio)"
-pass "Fedora's registry is a lower-priority second remote (Flathub $flathub_prio > Fedora $fedora_prio)"
+[[ -n $flathub_prio ]] || fail "Flathub's priority is set" "$(grep -n prio "$unit")"
+(( flathub_prio > 1 )) || fail "Flathub outranks a remote at the default priority 1 (got $flathub_prio)"
+pass "Flathub is the only remote added, at priority $flathub_prio, above any existing Fedora remote"
 
 grep -qE '^ExecStart=/usr/bin/dbus-run-session -- /usr/bin/flatpak preinstall .*-y' "$unit" ||
   fail "preinstall runs under dbus-run-session (needs a D-Bus session bus)" "$(grep -n Exec "$unit")"

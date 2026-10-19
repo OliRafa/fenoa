@@ -105,6 +105,6 @@ The units that need the network wait for it themselves:
 
 | Unit | Started by | Waits for |
 |---|---|---|
-| `fenoa-flatpak-preinstall.service` | `fenoa-flatpak-preinstall.timer`, every boot (later additions to the app set apply; apps the user removed stay removed) | `dl.flathub.org`, `registry.fedoraproject.org` |
+| `fenoa-flatpak-preinstall.service` | `fenoa-flatpak-preinstall.timer`, every boot (later additions to the app set apply; apps the user removed stay removed) | `dl.flathub.org` |
 | `fenoa-flatpak-update.service` | `fenoa-flatpak-update.timer`, daily | the same hosts, with `--wait=300`: the catch-up run fires at boot or right at resume, before Wi-Fi has reconnected, and nothing retries it, so it waits up to 5 minutes for the network (then checks for a metered link) and only then skips until the next day |
 | `fenoa-brew-setup.service` | `fenoa-brew-setup.timer`, every boot; wants and is ordered after `brew-setup.service` (the unpack: re-queued on every try, a no-op once done) and is ordered after `fenoa-firstboot-user.service` (the account) | `formulae.brew.sh`, `ghcr.io`, until the Brewfile has been applied: once `/var/lib/fenoa/brew-setup-done` exists the condition passes at once and the run is an instant no-op. A `brew bundle` that fails is retried with a growing delay instead of every 2 minutes (see above) |

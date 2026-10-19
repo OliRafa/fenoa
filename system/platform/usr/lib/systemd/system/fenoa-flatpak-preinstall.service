@@ -1,5 +1,5 @@
 [Unit]
-Description=Preinstall the Fenoa Flatpak app set (Flathub, plus Fedora for what Flathub lacks)
+Description=Preinstall the Fenoa Flatpak app set (Flathub)
 Documentation=man:flatpak-preinstall(1)
 # Runs Fedora/flatpak's upstream `flatpak preinstall`, which reads /usr/share/flatpak/preinstall.d
 # and installs the vendor app set — the install logic, idempotency and user opt-out are all upstream.
@@ -26,7 +26,7 @@ RemainAfterExit=yes
 # even configured until the user sets it up in the session — and offline `flatpak preinstall` skips
 # every ref it cannot reach, prints "Nothing to do." and EXITS 0. Restart=on-failure never fired,
 # RemainAfterExit kept the unit "active", and the app set silently never installed. Instead:
-#  - fenoa-online skips the run (inactive, not failed) until both remotes answer over HTTPS with a
+#  - fenoa-online skips the run (inactive, not failed) until Flathub answers over HTTPS with a
 #    valid certificate (resolving the names is not enough: a captive portal resolves them too);
 #  - the timer starts a skipped or failed run again 2 minutes after it ended (OnUnitInactiveSec=):
 #    with --noninteractive, an install or download error aborts preinstall with exit 1, so a pull
@@ -34,23 +34,20 @@ RemainAfterExit=yes
 #  - a run that exits 0 stays active (RemainAfterExit=yes), so the timer has nothing left to do.
 # One case still waits for the next boot: a remote that passes the HTTPS check but whose index then
 # cannot be fetched. preinstall skips its refs as if offline, prints "Nothing to do." and exits 0.
-ExecCondition=/usr/libexec/fenoa-online dl.flathub.org registry.fedoraproject.org
-# DIVERGENCE 2: add the remotes here rather than bluefin's build-time `flatpak remote-add`. A
+ExecCondition=/usr/libexec/fenoa-online dl.flathub.org
+# DIVERGENCE 2: add the remote here rather than bluefin's build-time `flatpak remote-add`. A
 # build-time system remote writes to /var/lib/flatpak, and our composefs-native image ships a FRESH
 # /var seeded only on first boot, so it would not survive to here. Flathub comes from the local file
-# baked by images/fenoa/Containerfile and needs no download; adding Fedora's OCI remote fetches
-# nothing either.
+# baked by images/fenoa/Containerfile and needs no download.
 #
-# Two remotes, Flathub first. `flatpak preinstall` installs each app from the first remote, in
-# priority order, that has it for this architecture, and breaks ties alphabetically — so with equal
-# priorities "fedora" would beat "flathub" for every app both carry (LibreOffice, Loupe, Evince...).
-# Flathub gets priority 10 and Fedora 1, so Fedora only supplies what Flathub lacks on aarch64: OBS
-# Studio. remote-modify re-asserts the priorities on machines whose remotes already existed.
+# Flathub is the only remote Fenoa adds, and it gets priority 10. `flatpak preinstall` installs each
+# app from the first remote, in priority order, that has it, and breaks ties alphabetically: a
+# Fedora Atomic switched to Fenoa already has Fedora's remotes at the default priority 1, and on a
+# tie "fedora" would beat "flathub" for every app both carry (LibreOffice, Loupe, Evince...).
+# remote-modify re-asserts the priority on machines whose remote already existed.
 ExecStartPre=/usr/bin/flatpak remote-add --system --if-not-exists flathub /etc/flatpak/remotes.d/flathub.flatpakrepo
-ExecStartPre=/usr/bin/flatpak remote-add --system --if-not-exists --title="Fedora Flatpaks" fedora oci+https://registry.fedoraproject.org
 ExecStartPre=/usr/bin/flatpak remote-modify --system --prio=10 flathub
-ExecStartPre=/usr/bin/flatpak remote-modify --system --prio=1 fedora
-# Wrap in dbus-run-session: `flatpak preinstall` needs a D-Bus SESSION bus (it activates the OCI
+# Wrap in dbus-run-session: `flatpak preinstall` needs a D-Bus SESSION bus (it activates flatpak's
 # authenticator), and a system service has none — without one it dies instantly with "Cannot
 # autolaunch D-Bus without X11 $DISPLAY" and installs nothing. dbus-run-session gives it a throwaway
 # session bus; flatpak still reaches the privileged install helper over the system bus as normal.

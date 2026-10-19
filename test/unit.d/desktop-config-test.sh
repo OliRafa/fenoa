@@ -286,7 +286,7 @@ for app in com.brave.Browser org.gnome.Loupe org.gnome.Evince org.libreoffice.Li
            org.localsend.localsend_app com.obsproject.Studio; do
   grep -qF "[Flatpak Preinstall $app]" "$manifest" || fail "the Flatpak set includes $app"
 done
-pass "the Flatpak set: Brave, Loupe, Evince, LibreOffice, Obsidian, LocalSend, OBS Studio (Fedora's build)"
+pass "the Flatpak set: Brave, Loupe, Evince, LibreOffice, Obsidian, LocalSend, OBS Studio"
 
 while read -r app; do
   case $app in
@@ -310,7 +310,7 @@ if sed 's/#.*//' "$packages" | awk 'NF{print $1}' | grep -qxE 'sddm|quickshell';
   fail "desktop.packages carries no SDDM or Quickshell"
 fi
 if sed 's/#.*//' "$packages" | awk 'NF{print $1}' | grep -qx 'obs-studio'; then
-  fail "OBS Studio is Fedora's Flatpak, not the native RPM"
+  fail "OBS Studio is a Flatpak, not the native RPM"
 fi
 pass "desktop.packages installs the shell, greeter and session, and nothing from Omarchy's stack"
 

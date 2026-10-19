@@ -13,7 +13,7 @@ Type=oneshot
 # day after day, and a run that went ahead offline would fail. A skipped run waits for the next
 # daily one. A oneshot has no start timeout by default, so nothing cuts the wait short, and each
 # request is bounded (10s per host), so the check ends at most about 20 seconds past its 5 minutes.
-ExecCondition=/usr/libexec/fenoa-online --wait=300 dl.flathub.org registry.fedoraproject.org
+ExecCondition=/usr/libexec/fenoa-online --wait=300 dl.flathub.org
 # Skip on a metered connection so a phone hotspot is not silently drained — the same guard ublue and
 # bluefin put on their flatpak update units. NMMetered: 1=yes, 3=guess-yes, 2=no, 4=guess-no, 0=unknown.
 # Proceed unless KNOWN-metered (1/3): if the property can't be read the string is empty and we still

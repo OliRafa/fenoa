@@ -120,8 +120,8 @@ for t in fenoa-flatpak-preinstall fenoa-flatpak-update; do
   [[ -L /etc/systemd/system/timers.target.wants/$t.timer ]] && ok "$t.timer enabled" || no "$t.timer not enabled"
 done
 unit="$(cat /usr/lib/systemd/system/fenoa-flatpak-preinstall.service 2>/dev/null || true)"
-case $unit in *"ExecCondition=/usr/libexec/fenoa-online dl.flathub.org registry.fedoraproject.org"*) ok "preinstall waits until the remotes answer" ;; *) no "preinstall has no fenoa-online condition (it would run offline and exit 0)" ;; esac
-case $unit in *"--prio=10 flathub"*"--prio=1 fedora"*) ok "Flathub outranks Fedora's registry (OBS-only fallback)" ;; *) no "remote priorities not set (Fedora would win ties)" ;; esac
+case $unit in *"ExecCondition=/usr/libexec/fenoa-online dl.flathub.org"*) ok "preinstall waits until Flathub answers" ;; *) no "preinstall has no fenoa-online condition (it would run offline and exit 0)" ;; esac
+case $unit in *"--prio=10 flathub"*) ok "Flathub gets priority 10 (it outranks a remote the machine already had)" ;; *) no "Flathub's priority not set (a Fedora remote would win ties)" ;; esac
 case $unit in *"dbus-run-session -- /usr/bin/flatpak preinstall"*) ok "preinstall runs under dbus-run-session" ;; *) no "preinstall not wrapped in dbus-run-session (dies without a session bus)" ;; esac
 # ...and dbus-run-session must exist: base-atomic has none, and without it the units fail with
 # 203/EXEC and retry forever. (The desktop once got it only by accident, via system-config-printer.)
