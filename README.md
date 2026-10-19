@@ -8,7 +8,13 @@ Fenoa is a [bootc](https://bootc-dev.github.io/bootc/) image built on Fedora's a
 |---|---|
 | `ghcr.io/olirafa/fenoa:44` | Hyprland + Noctalia. A multi-arch name: on a PC it resolves to `fenoa:44-amd64`, built from this branch; on an Apple Silicon Mac to `fenoa:44-arm64`, built from the [`asahi` branch](https://github.com/OliRafa/fenoa/tree/asahi) |
 
-It is rebuilt weekly and on every change, smoke-tested, and cosign-signed.
+It is rebuilt weekly and on every change, smoke-tested, and cosign-signed (keyless, through GitHub's OIDC):
+
+```sh
+cosign verify ghcr.io/olirafa/fenoa:44 \
+  --certificate-identity-regexp 'https://github.com/OliRafa/fenoa/.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
 
 ## What you get
 

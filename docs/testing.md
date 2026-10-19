@@ -44,6 +44,6 @@ podman build -t fenoa:44-boottest --build-arg BASE=fenoa:44 -f images/boottest/C
 journalctl -u fenoa-boottest
 ```
 
-`boot-smoke.sh` checks the running kernel and GPU render node, systemd-boot on the located ESP with no GRUB or shim there (and notes the Secure Boot state), services (greetd, NetworkManager, firewalld…), zram, failed units, the greeter process and state directory, SELinux denials for greetd/noctalia-greeter, and first-boot provisioning (including a machine ID committed in place of `uninitialized`, and the provisioning timers enabled).
+`boot-smoke.sh` checks the running kernel and GPU render node, systemd-boot on the ESP of the disk the system runs from with no GRUB or shim there (and notes the Secure Boot state; on a Fedora Atomic switched to Fenoa, which keeps its GRUB, only that it booted through the ostree backend), services (greetd, NetworkManager, firewalld…), zram, failed units, the greeter process and state directory, SELinux denials for greetd/noctalia-greeter, and first-boot provisioning (including a machine ID committed in place of `uninitialized`, and the provisioning timers enabled).
 
 Only a real boot shows: the tty1 first-boot prompts (systemd-firstboot's locale, keymap and timezone, then fenoa-firstboot-user's account), the greeter handoff into Hyprland, a `bootc switch` from Fedora Atomic, and anything SELinux only denies at runtime.

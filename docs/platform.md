@@ -25,7 +25,7 @@ sudo podman run --rm --privileged --pid=host \
   bootc install to-disk --composefs-backend --bootloader systemd --filesystem btrfs /dev/nvme0n1
 ```
 
-A live session usually keeps `/var/lib/containers` in RAM and the image takes several GB there, so use a machine with plenty of memory or point podman's storage at another disk. The install writes systemd-boot to the ESP, including the fallback path `/EFI/BOOT/BOOTX64.EFI` that the firmware boots when no boot entry names another loader. This is the path CI tests (`images/fenoa/hack/install-to-disk.sh`). Reboot into the installed system and the [first boot](../README.md#first-boot) takes over.
+A live session usually keeps `/var/lib/containers` in RAM and the image takes several GB there, so use a machine with plenty of memory or point podman's storage at another disk. The install writes systemd-boot to the ESP, including the fallback path `/EFI/BOOT/BOOTX64.EFI` that the firmware boots when no boot entry names another loader. CI runs the same install onto a disk image (`images/fenoa/hack/install-to-disk.sh`), with `--generic-image` so it leaves the runner's firmware variables alone; the firmware boot entry a real install adds is not tested there. Reboot into the installed system and the [first boot](../README.md#first-boot) takes over.
 
 ### From Fedora Atomic (`bootc switch`)
 

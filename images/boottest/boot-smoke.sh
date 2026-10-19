@@ -20,33 +20,51 @@ esac
 render="$(ls /dev/dri/renderD* 2>/dev/null | head -1 || true)"
 [[ -n $render ]] && ok "GPU render node present ($render)" || no "no GPU render node — the desktop would render on llvmpipe"
 
-echo "== bootloader: systemd-boot (not GRUB) =="
-# bootctl only looks for the ESP at /efi, /boot and /boot/efi, and a composefs install may mount it
-# nowhere. Find it by its GPT partition type and mount it read-only if needed, so the "no grub"
-# check below is not vacuous.
-esp="$(bootctl --print-esp-path 2>/dev/null || true)" esp_tmp=""
-if [[ -z $esp ]]; then
-  esp_dev="$(lsblk -nrpo PATH,PARTTYPE 2>/dev/null | awk 'tolower($2) == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" { print $1; exit }')"
-  if [[ -n $esp_dev ]]; then
-    esp="$(findmnt -no TARGET "$esp_dev" 2>/dev/null | head -1 || true)"
-    if [[ -z $esp ]]; then
-      esp_tmp="$(mktemp -d)"
-      if mount -o ro "$esp_dev" "$esp_tmp" 2>/dev/null; then esp="$esp_tmp"; else rmdir "$esp_tmp"; esp_tmp=""; fi
+echo "== bootloader =="
+cmdline="$(cat /proc/cmdline 2>/dev/null || true)"
+if [[ $cmdline == *composefs=* ]]; then
+  # bootctl only looks for the ESP at /efi, /boot and /boot/efi, and a composefs install may mount
+  # it nowhere. Find it by its GPT partition type on the disk the system runs from (another disk's
+  # ESP, on a dual-boot machine, proves nothing) and mount it read-only if needed, so the "no grub"
+  # check below is not vacuous.
+  esp="$(bootctl --print-esp-path 2>/dev/null || true)" esp_tmp="" root_disk=""
+  for m in /sysroot /var /; do
+    src="$(findmnt -no SOURCE "$m" 2>/dev/null | head -1 || true)"
+    src="${src%%\[*}"
+    [[ $src == /dev/* ]] || continue
+    # lsblk -s walks up from the device (through LUKS or LVM) to the disk it lives on.
+    root_disk="$(lsblk -nrspo PATH,TYPE "$src" 2>/dev/null | awk '$2 == "disk" { print $1; exit }')"
+    [[ -n $root_disk ]] && break
+  done
+  if [[ -z $esp ]]; then
+    esp_dev="$(lsblk -nrpo PATH,PARTTYPE ${root_disk:+"$root_disk"} 2>/dev/null | awk 'tolower($2) == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" { print $1; exit }')"
+    if [[ -n $esp_dev ]]; then
+      esp="$(findmnt -no TARGET "$esp_dev" 2>/dev/null | head -1 || true)"
+      if [[ -z $esp ]]; then
+        esp_tmp="$(mktemp -d)"
+        if mount -o ro "$esp_dev" "$esp_tmp" 2>/dev/null; then esp="$esp_tmp"; else rmdir "$esp_tmp"; esp_tmp=""; fi
+      fi
     fi
   fi
-fi
-[[ -n $esp ]] && ok "ESP located at $esp" || no "ESP not found"
-status="$(bootctl status 2>/dev/null || true)"
-case $status in *systemd-boot*) ok "systemd-boot is the active bootloader" ;; *) no "systemd-boot not active" ;; esac
-secure_boot="$(printf '%s\n' "$status" | sed -n 's/^ *Secure Boot: *//p' | head -1)"
-note "Secure Boot: ${secure_boot:-unknown} (systemd-boot is unsigned; it boots only with Secure Boot off)"
-if [[ -n $esp ]]; then
-  grub="$(find "$esp" \( -iname 'grub*.efi' -o -iname 'shim*.efi' \) -print -quit 2>/dev/null || true)"
-  [[ -z $grub ]] && ok "no GRUB or shim on the ESP" || no "GRUB or shim on the ESP: $grub"
-fi
-if [[ -n $esp_tmp ]]; then
-  umount "$esp_tmp" 2>/dev/null || true
-  rmdir "$esp_tmp" 2>/dev/null || true
+  [[ -n $esp ]] && ok "ESP located at $esp${root_disk:+ (on $root_disk)}" || no "ESP not found"
+  status="$(bootctl status 2>/dev/null || true)"
+  case $status in *systemd-boot*) ok "systemd-boot is the active bootloader" ;; *) no "systemd-boot not active" ;; esac
+  secure_boot="$(printf '%s\n' "$status" | sed -n 's/^ *Secure Boot: *//p' | head -1)"
+  note "Secure Boot: ${secure_boot:-unknown} (systemd-boot is unsigned; it boots only with Secure Boot off)"
+  if [[ -n $esp ]]; then
+    grub="$(find "$esp" \( -iname 'grub*.efi' -o -iname 'shim*.efi' \) -print -quit 2>/dev/null || true)"
+    [[ -z $grub ]] && ok "no GRUB or shim on the ESP" || no "GRUB or shim on the ESP: $grub"
+  fi
+  if [[ -n $esp_tmp ]]; then
+    umount "$esp_tmp" 2>/dev/null || true
+    rmdir "$esp_tmp" 2>/dev/null || true
+  fi
+elif [[ $cmdline == *ostree=* ]]; then
+  # A Fedora Atomic switched to Fenoa keeps its ostree backend and its shim and GRUB, so the
+  # systemd-boot checks do not apply; what matters is that the initramfs pivoted into the image.
+  ok "booted through the ostree backend (a Fedora Atomic switched to Fenoa; its GRUB boots it)"
+else
+  no "neither composefs= nor ostree= on the kernel command line: $cmdline"
 fi
 
 echo "== services =="
