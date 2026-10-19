@@ -7,7 +7,7 @@ How the Fenoa image is put together, and where each kind of file lives.
 ```
 quay.io/fedora-asahi-remix-atomic-desktops/base-atomic:44   Asahi kernel-16k, firmware, m1n1/U-Boot, dracut, audio DSP
   └─ images/fenoa/Containerfile  (stage: platform)          bootc plumbing for Apple Silicon — never published
-       └─ images/fenoa/Containerfile  (stage: desktop)      Hyprland + Noctalia + greeter  →  ghcr.io/olirafa/fenoa
+       └─ images/fenoa/Containerfile  (stage: desktop)      Hyprland + Noctalia + greeter  →  ghcr.io/olirafa/fenoa:44-arm64 (in the fenoa:44 index)
             └─ images/fairydust/Containerfile               fairydust kernel swap          →  ghcr.io/olirafa/fenoa-fairydust
 ghcr.io/ublue-os/brew           → prebuilt Homebrew tree copied in by the platform stage
 images/fenoa/Containerfile (stage: librepods) → the AirPods plugin's daemon, built from a pinned commit of

@@ -2,27 +2,25 @@ name: Publish images (GHCR)
 
 # Build the fenoa and fenoa-fairydust bootc images, smoke-test them, push them to GHCR so
 # `bootc install` / `bootc switch` / `bootc upgrade` have something to pull, then cosign-sign them
-# (keyless, via GitHub OIDC). aarch64 runner — the images are Apple-Silicon / Fedora Asahi only.
+# (keyless, via GitHub OIDC). aarch64 runner: this stream's images are Apple Silicon / Fedora Asahi.
 #
-#   ghcr.io/<owner>/fenoa:44             (Hyprland + Noctalia, stock Asahi kernel-16k)
-#   ghcr.io/<owner>/fenoa-fairydust:44   (the same with the fairydust kernel, FROM fenoa)
+# fenoa is one multi-arch name: each stream publishes its own architecture's image under an arch tag
+# and then points fenoa:44 and :latest at an index of the newest image of each (images/publish-index.sh),
+# so bootc on any machine pulls fenoa:44 and gets its own.
 #
-# Also tagged :44-<shortsha> (immutable) and :latest. The platform stage is built as part of fenoa
-# and never pushed on its own.
+#   ghcr.io/<owner>/fenoa:44             index of :44-amd64 and :44-arm64
+#   ghcr.io/<owner>/fenoa:44-arm64       this stream's image (Hyprland + Noctalia, stock Asahi kernel-16k)
+#   ghcr.io/<owner>/fenoa-fairydust:44   the same with the fairydust kernel, FROM fenoa (arm64 only)
 #
-# Runs only after "Image e2e" (install-to-disk, first boot, every smoke test) has passed for a push
-# to main or its weekly scheduled run, and builds exactly the commit that e2e tested; it repeats the
-# smoke tests on its own build before pushing anything.
+# Also :44-<shortsha> (immutable, this stream's image) and :latest (fenoa: the index). The platform
+# stage is built as part of fenoa and never pushed on its own.
+#
+# "Image e2e" calls this once install-to-disk, first boot and every smoke test have passed, for a
+# push to a stream branch, its weekly run or a manual run, never for a pull request; so it builds
+# exactly the commit e2e tested, and repeats the smoke tests on its own build before pushing anything.
 on:
-  workflow_run:
-    workflows: ["Image e2e"]
-    types: [completed]
-    branches: [main]
+  workflow_call:
   workflow_dispatch:
-
-concurrency:
-  group: publish-${{ github.ref }}
-  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -31,18 +29,18 @@ permissions:
 
 jobs:
   publish:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'schedule'))
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 120
+    concurrency:
+      group: publish-${{ github.ref }}
+      cancel-in-progress: false
     env:
       FEDORA: "44"
+      ARCH: arm64
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Compute image refs (GHCR requires a lowercase namespace)
         id: refs
@@ -51,7 +49,7 @@ jobs:
           {
             echo "fenoa=ghcr.io/$owner/fenoa"
             echo "fairydust=ghcr.io/$owner/fenoa-fairydust"
-            sha="${{ github.event.workflow_run.head_sha || github.sha }}"
+            sha="${{ github.sha }}"
             echo "sha=${sha::12}"
           } >> "$GITHUB_OUTPUT"
 
@@ -100,17 +98,18 @@ jobs:
           fenoa="${{ steps.refs.outputs.fenoa }}"
           fd="${{ steps.refs.outputs.fairydust }}"
           sha="${{ steps.refs.outputs.sha }}"
-          push_one() {           # push_one <local> <remote-repo> <digestfile>
-            local local_tag="$1" repo="$2" df="$3"
-            for t in "$FEDORA" "$FEDORA-$sha" latest; do podman tag "$local_tag" "$repo:$t"; done
-            # A single push of the primary tag writes the digest; the alias tags share it.
-            podman push "$repo:$FEDORA" --digestfile "$df"
-            podman push "$repo:$FEDORA-$sha"
-            podman push "$repo:latest"
+          push_tags() {          # push_tags <local> <remote-repo> <digestfile> <tag>...
+            local local_tag="$1" repo="$2" df="$3" t
+            shift 3
+            for t in "$@"; do podman tag "$local_tag" "$repo:$t"; done
+            # A single push of the first tag writes the digest; the alias tags share it.
+            podman push "$repo:$1" --digestfile "$df"
+            for t in "${@:2}"; do podman push "$repo:$t"; done
             echo "  pushed $repo (digest $(cat "$df"))"
           }
-          push_one "fenoa:$FEDORA"           "$fenoa" fenoa.digest
-          push_one "fenoa-fairydust:$FEDORA" "$fd"    fd.digest
+          # fenoa:$FEDORA and :latest are the multi-arch index, rebuilt by the index job below.
+          push_tags "fenoa:$FEDORA"           "$fenoa" fenoa.digest "$FEDORA-$ARCH" "$FEDORA-$sha"
+          push_tags "fenoa-fairydust:$FEDORA" "$fd"    fd.digest    "$FEDORA" "$FEDORA-$sha" latest
           {
             echo "fenoa_ref=$fenoa@$(cat fenoa.digest)"
             echo "fd_ref=$fd@$(cat fd.digest)"
@@ -133,8 +132,56 @@ jobs:
           {
             echo "### Published + signed"
             echo ""
-            echo "- \`${{ steps.push.outputs.fenoa_ref }}\`"
-            echo "- \`${{ steps.push.outputs.fd_ref }}\`"
+            echo "- \`${{ steps.push.outputs.fenoa_ref }}\` (\`$FEDORA-$ARCH\`, \`$FEDORA-${{ steps.refs.outputs.sha }}\`)"
+            echo "- \`${{ steps.push.outputs.fd_ref }}\` (\`$FEDORA\`, \`$FEDORA-${{ steps.refs.outputs.sha }}\`, \`latest\`)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Point fenoa:44 and :latest at the newest image of each architecture. Both streams' runs queue on
+  # one group, so two indexes are never assembled at once; a run still pending when a newer one
+  # queues is cancelled, which loses nothing, since the newer run reads the same tags after it.
+  index:
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    concurrency:
+      group: publish-fenoa-index
+      cancel-in-progress: false
+    env:
+      FEDORA: "44"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Install podman and skopeo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends podman skopeo
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Assemble the multi-arch index
+        id: index
+        run: |
+          repo="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/fenoa"
+          ./images/publish-index.sh "$repo" "$FEDORA" index.digest
+          echo "ref=$repo@$(cat index.digest)" >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign the index (keyless)
+        env:
+          COSIGN_YES: "true"
+        run: |
+          cosign login ghcr.io -u "${{ github.actor }}" -p "${{ secrets.GITHUB_TOKEN }}"
+          cosign sign "${{ steps.index.outputs.ref }}"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Index"
             echo ""
-            echo "Tags: \`$FEDORA\`, \`$FEDORA-${{ steps.refs.outputs.sha }}\`, \`latest\`"
+            echo "- \`${{ steps.index.outputs.ref }}\` (\`$FEDORA\`, \`latest\`)"
           } >> "$GITHUB_STEP_SUMMARY"

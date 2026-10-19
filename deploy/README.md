@@ -205,17 +205,21 @@ sudo deploy/fenoa-grow-esp --prune-only
 
 ## Images, signing & updates
 
-`.github/workflows/publish.yml` builds and pushes both images to GHCR after every change on `main`
-that passes the image e2e workflow (and weekly, to fold in base-image + security updates):
+`.github/workflows/publish.yml` builds and pushes both images to GHCR after every change that
+passes the image e2e workflow (and weekly, to fold in base-image + security updates):
 
 ```
-ghcr.io/olirafa/fenoa:44              # Hyprland + Noctalia, stock Asahi kernel-16k
+ghcr.io/olirafa/fenoa:44              # multi-arch index; on a Mac it resolves to :44-arm64
+ghcr.io/olirafa/fenoa:44-arm64        # Hyprland + Noctalia, stock Asahi kernel-16k
 ghcr.io/olirafa/fenoa-fairydust:44    # the same, with the fairydust kernel (USB-C DP alt-mode)
 ```
 
-The platform stage they share is built and tested in CI but not published. Also tagged
-`44-<shortsha>` (immutable) and `latest`. Both are **cosign-signed keyless** (Fulcio/Rekor
-via GitHub OIDC), so provenance is verifiable:
+`fenoa:44` is shared by every architecture Fenoa publishes: each stream pushes its own image under an
+arch tag (`44-arm64` here) and then points `fenoa:44` and `latest` at an index of the newest image of
+each (`images/publish-index.sh`), so `bootc` pulls the image for the machine it runs on. The platform
+stage is built and tested in CI but not published. Also tagged `44-<shortsha>` (immutable). The
+images and the index are **cosign-signed keyless** (Fulcio/Rekor via GitHub OIDC), so provenance is
+verifiable:
 
 ```sh
 cosign verify ghcr.io/olirafa/fenoa:44 \

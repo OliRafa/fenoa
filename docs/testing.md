@@ -18,6 +18,7 @@ Runs anywhere (CI: `.github/workflows/tests.yml` on ubuntu, plus shellcheck at e
   - `desktop-config-test.sh` — config parsing and cross-file agreement (greetd ↔ tmpfiles ↔ greeter, skel ↔ defaults, bindings ↔ helpers, Flatpaks ↔ default apps, the Flatpak app groups pinned to `stable` and the light and dark adw-gtk3 theme extensions at 3.22, `QT_QPA_PLATFORMTHEME=gtk3` for Qt Flatpaks, the Secret portal ↔ gnome-keyring, the desktop stage's units ↔ `50-fenoa-desktop.preset`, its `--global` user units ↔ `user-preset/50-fenoa-desktop.preset`, Noctalia plugin widgets ↔ enabled plugins ↔ what the image ships for them), no second locker replacing a live lock; runs `Hyprland --verify-config` when Hyprland is installed
   - `desktop-helpers-test.sh` — `fenoa-kbd-backlight` and `fenoa-hypr-clamshell`
   - `keyboard-layout-test.sh` — `fenoa/keyboard.lua` derives the layout from `localectl`'s XKB settings or the console keymap (via `kbd-model-map`), Latin layout first; `input.lua` and `fenoa-greeter-session` hand exactly that to Hyprland and the greeter, and the greeter still starts when the resolver cannot run
+  - `publish-index-test.sh` — `images/publish-index.sh` lists each stream's arch tag in the multi-arch `fenoa:44` index, keeps an architecture that has no tag yet from the current `fenoa:44` (an index, or the single-arch image it was), and pushes nothing when there is no image or the registry errors
   - `shell-setup-test.sh` — `/etc/profile.d/fenoa-shell.sh` wires starship, zoxide, fzf and eza into interactive bash only when installed, and leaves other shells (zsh) alone
 - `deploy/tests/*.test.sh` — the ESP backup/restore, capacity, GPT absorb, boot-entry repair and BLS prune libraries
 
@@ -36,7 +37,7 @@ CI: `.github/workflows/image-e2e.yml` on `ubuntu-24.04-arm`, building with rootf
 | `deploy/tests/esp-bootc-integration.sh` | `fenoa` | real `bootc install to-filesystem` over a fake Asahi ESP; the preboot layer survives |
 | `images/fairydust/hack/smoke.sh` | `fenoa-fairydust` | kernel swap, DP alt-mode and GPU drivers, PE vmlinuz, DTBs under `dtb/apple/`, rebuilt initramfs |
 
-`publish.yml` only runs after this workflow has passed for a push to `main` (or its weekly run), builds that exact commit, and repeats the smoke tests on its own build before it pushes anything.
+This workflow ends by calling `publish.yml` once every step above has passed, for a push to a stream branch, its weekly run or a manual run (never a pull request): it builds that exact commit again and repeats the smoke tests on its own build before it pushes anything.
 
 ## 3. Hardware: `images/boottest/`
 

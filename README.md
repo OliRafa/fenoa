@@ -6,7 +6,7 @@ Fenoa is a [bootc](https://bootc-dev.github.io/bootc/) image built on [Fedora As
 
 | Image | What it is |
 |---|---|
-| `ghcr.io/olirafa/fenoa:44` | Hyprland + Noctalia on the stock Asahi `kernel-16k` |
+| `ghcr.io/olirafa/fenoa:44` | Hyprland + Noctalia on the stock Asahi `kernel-16k` (a multi-arch name: on a Mac it resolves to `fenoa:44-arm64`) |
 | `ghcr.io/olirafa/fenoa-fairydust:44` | The same with the experimental [fairydust](docs/fairydust.md) kernel, for USB-C DisplayPort alt-mode |
 
 Both are rebuilt weekly and on every change, smoke-tested, and cosign-signed.
