@@ -5,7 +5,7 @@
 # "uninitialized", so the installed system detects its first boot. This is the shipping install
 # path (docs/platform.md), with --generic-image so it leaves the runner's firmware boot entries alone.
 #
-# Needs root, loop devices and rootful podman with the image in /var/lib/containers:
+# Needs root, loop devices, sfdisk and jq, and rootful podman with the image in /var/lib/containers:
 #   sudo ./images/fenoa/hack/install-to-disk.sh [IMAGE] [WORKDIR]
 set -euo pipefail
 IMAGE="${1:-fenoa:44}"
@@ -28,7 +28,18 @@ echo "== bootc install to-disk: $IMAGE =="
     --generic-image --via-loopback --wipe /output/disk.raw
 
 # Inspect by loopback mount (no libguestfs: its qemu appliance needs KVM, which a runner may lack).
-# p1 = ESP (vfat), p2 = root (btrfs).
+# Find the ESP and the root partition by GPT type, not by number: on x86_64 bootc puts a 1 MiB
+# BIOS-BOOT partition first (ESP p2, root p3), on aarch64 it does not (p1, p2). sfdisk reads the
+# table straight from the image file, so nothing waits on udev.
+# part_number TYPE-GUID: the number of the partition of that type.
+part_number() {
+  sfdisk -J "$disk" | jq -r --arg type "$1" \
+    'first(.partitiontable.partitions[] | select((.type | ascii_upcase) == $type) | .node | capture("(?<n>[0-9]+)$").n) // empty'
+}
+esp_part=$(part_number C12A7328-F81F-11D2-BA4B-00A0C93EC93B)
+root_part=$(part_number 4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709)
+echo "partitions: $(sfdisk -J "$disk" | jq -c '[.partitiontable.partitions[] | {node, type, name}]')"
+[[ -n $esp_part && -n $root_part ]] || { echo "FAIL: no ESP or no x86-64 root partition on the disk"; echo "INSTALL-TO-DISK: FAIL"; rm -f "$disk"; exit 1; }
 loop=$(losetup -Pf --show "$disk")
 mnt="$WORKDIR/mnt"
 mkdir -p "$mnt/esp" "$mnt/root"
@@ -44,7 +55,7 @@ trap cleanup EXIT
 
 sd=0 grub=0 kern=0 cfs=0 ost=0 st=0 mid=0
 
-mount "${loop}p1" "$mnt/esp"
+mount "${loop}p$esp_part" "$mnt/esp"
 echo "--- ESP /EFI ---"
 find "$mnt/esp/EFI" -maxdepth 3 -print 2>/dev/null || true
 [[ -e $mnt/esp/EFI/systemd/systemd-bootx64.efi || -e $mnt/esp/EFI/BOOT/BOOTX64.EFI ]] && sd=1
@@ -52,7 +63,7 @@ find "$mnt/esp/EFI" -maxdepth 3 -print 2>/dev/null || true
 [[ -n "$(find "$mnt/esp/EFI/Linux" -name vmlinuz 2>/dev/null | head -1)" ]] && kern=1
 umount "$mnt/esp"
 
-mount "${loop}p2" "$mnt/root"
+mount "${loop}p$root_part" "$mnt/root"
 echo "--- deployment root ---"
 ls -a "$mnt/root" 2>/dev/null | head
 # composefs-native backend root layout: composefs/ ostree/ state/ (NOT the classic

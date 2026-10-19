@@ -53,7 +53,7 @@ jobs:
       - name: Install podman + disk tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends podman btrfs-progs dosfstools gdisk
+          sudo apt-get install -y --no-install-recommends podman btrfs-progs dosfstools gdisk fdisk jq
 
       # Rootful podman throughout: `bootc install` reads the image from /var/lib/containers, so the
       # image must be built into root storage (sudo) and the scripts run under sudo.
