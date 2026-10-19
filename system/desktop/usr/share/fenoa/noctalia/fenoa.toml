@@ -46,6 +46,10 @@ type = "thepunkoff/pomodoro:widget"
 [widget.airpods]
 type = "harveywuk/airpods:airpods"
 
+[widget.media]
+# Keep the bar free of an empty player slot when nothing is playing.
+hide_when_no_media = true
+
 [bar.default]
 # Noctalia's default right-hand side, with the plugin widgets in front and AirPods beside Bluetooth.
 # Setting the list replaces the default whole, so a widget Noctalia adds to its own default later

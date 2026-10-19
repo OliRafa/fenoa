@@ -54,7 +54,7 @@ pass "Noctalia defaults: polkit agent, uwsm-launched apps, greeter auto sync"
 # A plugin widget shows only while its plugin is enabled, and AI Usage only draws what the
 # ai-usagebar CLI reports, which nothing but the image provides.
 [[ "$(toml "$noctalia_defaults" 'all(w["type"].split(":")[0] in t["plugins"]["enabled"]
-  for w in t["widget"].values() if "/" in w["type"])')" == "True" ]] ||
+  for w in t["widget"].values() if "/" in w.get("type", ""))')" == "True" ]] ||
   fail "every plugin widget in the defaults belongs to an enabled plugin"
 [[ "$(toml "$noctalia_defaults" 't["widget"]["ai_usage"]["type"]')" == "felipeartur/ai-usagebar:bar" ]] ||
   fail "the ai_usage widget is the AI Usage plugin's bar widget"
