@@ -37,7 +37,7 @@ CI: `.github/workflows/image-e2e.yml` on `ubuntu-24.04-arm`, building with rootf
 | `deploy/tests/esp-bootc-integration.sh` | `fenoa` | real `bootc install to-filesystem` over a fake Asahi ESP; the preboot layer survives |
 | `images/fairydust/hack/smoke.sh` | `fenoa-fairydust` | kernel swap, DP alt-mode and GPU drivers, PE vmlinuz, DTBs under `dtb/apple/`, rebuilt initramfs |
 
-This workflow ends by calling `publish.yml` once every step above has passed, for a push to a stream branch, its weekly run (on this branch a `workflow_dispatch` that main's Image e2e sends on its schedule) or a manual run (never a pull request): it builds that exact commit again and repeats the smoke tests on its own build before it pushes anything.
+On a stream branch (a push, its weekly run, which on this branch is a `workflow_dispatch` that main's Image e2e sends on its schedule, or a manual run; never a pull request) this workflow ends by pushing the images every step above tested as the immutable `fenoa:44-<sha>` and `fenoa-fairydust:44-<sha>` and calling `publish.yml` with their digests, which tags them (`fenoa:44-arm64`; `fenoa-fairydust:44` and `latest`), signs them and rebuilds the `fenoa:44` index. Nothing is built twice, and what machines pull is byte for byte what passed these tests.
 
 ## 3. Hardware: `images/boottest/`
 
