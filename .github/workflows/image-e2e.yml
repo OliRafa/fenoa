@@ -24,8 +24,8 @@ on:
       - 'deploy/**'
       - 'Brewfile'
       - '.github/workflows/image-e2e.yml'
-  schedule:
-    - cron: '0 6 * * 1'   # weekly: base-image, kernel and security updates; publish.yml follows on success
+  # Weekly (base-image, kernel and security updates): GitHub runs schedules only on the default
+  # branch, so main's Image e2e starts this branch's run with a workflow_dispatch on its schedule.
   workflow_dispatch:
 
 # A newer push to a pull request supersedes the run in progress. On a stream branch the run ends in a

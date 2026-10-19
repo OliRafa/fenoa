@@ -2,6 +2,8 @@
 
 **Fe**dora **No**ctalia **A**tomic — an image-based desktop for Apple Silicon Macs.
 
+> This is the `asahi` branch, Fenoa for Apple Silicon. [`main`](https://github.com/OliRafa/fenoa/tree/main) builds Fenoa for x86_64 PCs. Both publish to the same multi-arch `ghcr.io/olirafa/fenoa:44`, so each machine pulls its own architecture.
+
 Fenoa is a [bootc](https://bootc-dev.github.io/bootc/) image built on [Fedora Asahi Remix](https://asahilinux.org/fedora/)'s atomic base: a [Hyprland](https://hypr.land) desktop with the [Noctalia](https://noctalia.dev) shell and [noctalia-greeter](https://github.com/noctalia-dev/noctalia-greeter) login screen, booted through systemd-boot on bootc's composefs backend. The whole OS is one signed container image; updates are atomic and roll back with `bootc rollback`.
 
 | Image | What it is |

@@ -2,6 +2,8 @@
 
 Fenoa (Fedora Noctalia Atomic) is a bootc image for Apple Silicon Macs: Fedora Asahi Remix atomic + systemd-boot + composefs, with a Hyprland + Noctalia desktop and noctalia-greeter on greetd. An optional variant swaps in the fairydust kernel for USB-C DisplayPort alt-mode.
 
+This is the `asahi` branch, the Apple Silicon stream. `main` is the x86_64 stream; both publish into the multi-arch `ghcr.io/olirafa/fenoa:44` (`images/publish-index.sh`). A change to the desktop or to provisioning usually belongs on both branches.
+
 ## Layout
 
 - `images/fenoa/Containerfile` - two stages: `platform` (Fedora Asahi + bootc plumbing, no desktop) and the final desktop stage, plus helper stages that only supply files (`brew`, and `librepods`, which builds the AirPods plugin's daemon)
