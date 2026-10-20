@@ -90,7 +90,8 @@ pass "lid close without an external display leaves the panel to logind"
 
 : >"$log"; printf 'eDP-1\n' >"$marker"; run bash "$clam" open
 [[ ! -e $marker ]] || fail "lid open removes the reload marker"
-grep -qF 'hyprctl eval hl.monitor({ output = "eDP-1", mode = "preferred", position = "auto", scale = "auto" })' "$log" ||
+# hl.monitor merges into the panel's existing rule, so only `disabled = false` turns it back on.
+grep -qF 'hyprctl eval hl.monitor({ output = "eDP-1", disabled = false })' "$log" ||
   fail "lid open re-enables the panel" "$(cat "$log")"
 grep -q '^hyprctl reload' "$log" || fail "lid open reloads so configured monitor rules win"
 pass "lid open re-enables the panel and reloads the monitor rules"

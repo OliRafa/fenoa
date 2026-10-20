@@ -9,7 +9,9 @@
 # makes logind treat the machine as docked and ignore the lid). The panel's name is left in
 # $XDG_RUNTIME_DIR/fenoa-clamshell while it is off, and the Hyprland defaults (fenoa/monitors.lua)
 # re-disable it on every config reload. On open the marker goes, the panel is re-enabled explicitly
-# and `hyprctl reload` re-applies the configured monitor rules, so a scale set in hyprland.lua wins.
+# and `hyprctl reload` re-applies the configured monitor rules. hl.monitor merges into the output's
+# existing rule, so close and open only flip `disabled`: the panel keeps the mode, position and
+# scale set in hyprland.lua, and a rule that left `disabled` out would keep the panel off.
 
 set -euo pipefail
 
@@ -42,7 +44,7 @@ case $action in
     ;;
   open)
     rm -f "$marker"
-    hyprctl eval "hl.monitor({ output = \"$internal\", mode = \"preferred\", position = \"auto\", scale = \"auto\" })" >/dev/null
+    hyprctl eval "hl.monitor({ output = \"$internal\", disabled = false })" >/dev/null
     hyprctl reload >/dev/null
     ;;
 esac
