@@ -13,6 +13,9 @@ bind("SUPER + SHIFT + RETURN", "Browser", launch("com.brave.Browser.desktop"))
 bind("SUPER + SHIFT + B", "Browser", launch("com.brave.Browser.desktop"))
 bind("SUPER + SHIFT + F", "File manager", launch("nautilus --new-window"))
 bind("SUPER + SHIFT + N", "Editor", launch("xdg-terminal-exec nvim"))
+bind("SUPER + SHIFT + M", "Music", launch("fenoa-webapp-spotify.desktop"))
+bind("SUPER + SHIFT + E", "Email", launch("fenoa-webapp-proton-mail.desktop"))
+bind("SUPER + SHIFT + C", "Calendar", launch("fenoa-webapp-proton-calendar.desktop"))
 
 -- --- Shell (Noctalia) -----------------------------------------------------------------------------
 bind("SUPER + SPACE", "Launcher", noctalia("panel-toggle launcher"))

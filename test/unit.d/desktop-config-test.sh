@@ -222,8 +222,17 @@ fi
 
 while read -r helper; do
   [[ -x $D/usr/bin/$helper ]] || fail "a binding runs a shipped, executable helper: $helper"
-done < <(grep -hoE '"fenoa-[a-z-]+' "$hypr"/fenoa/*.lua | tr -d '"' | sort -u)
+done < <(grep -hoE '"fenoa-[a-z-]+[ "]' "$hypr"/fenoa/*.lua | tr -d '" ' | sort -u)
 pass "every fenoa-* helper the bindings run ships and is executable"
+
+# uwsm-app also takes a desktop ID; the entry has to be in the overlay or come with a preinstalled
+# Flatpak, or the key does nothing.
+while read -r id; do
+  [[ -f $D/usr/share/applications/$id ]] ||
+    grep -qF "[Flatpak Preinstall ${id%.desktop}]" "$D/usr/share/flatpak/preinstall.d/fenoa.preinstall" ||
+    fail "a binding launches a desktop entry the image ships: $id"
+done < <(grep -hoE 'launch\("[A-Za-z0-9._-]+\.desktop"' "$hypr"/fenoa/bindings.lua | sed -E 's/^launch\("//; s/"$//' | sort -u)
+pass "every desktop entry the bindings launch ships, in the overlay or as a preinstalled Flatpak"
 
 # The Noctalia IPC verbs the bindings use (checked against `noctalia msg --help` from 5.2.1).
 known_verbs=" bar-toggle caffeine-toggle mic-mute media nightlight-toggle notification-clear-active notification-dnd-toggle notification-invoke-latest panel-toggle screenshot-fullscreen screenshot-region session settings-toggle volume-down volume-mute volume-up window-switcher brightness-down brightness-up "
