@@ -1,4 +1,4 @@
--- Keyboard and trackpad. https://wiki.hypr.land/Configuring/Basics/Variables/#input
+-- Keyboard, mouse and trackpad. https://wiki.hypr.land/Configuring/Basics/Variables/#input
 
 -- Keyboard layout: the system setting, as fenoa/keyboard.lua resolves it (a Latin layout first, so
 -- the letter bindings work). The login screen runs the same resolver, so the greeter and the session
@@ -15,6 +15,8 @@ hl.config({
     repeat_rate = 40,
     repeat_delay = 250,
     numlock_by_default = true,
+    -- Mouse wheels scroll the content, like the touchpad (natural_scroll here covers mice only).
+    natural_scroll = true,
 
     touchpad = {
       -- Natural scrolling, and physical clicks instead of taps: disable_while_typing alone does not
