@@ -45,6 +45,7 @@ Defined in `/usr/share/fenoa/hypr/fenoa/bindings.lua`. Override or add bindings 
 | `Super + Shift + Return` / `Super + Shift + B` | Brave |
 | `Super + Shift + F` | Files |
 | `Super + Shift + N` | Neovim in a terminal |
+| `Super + Shift + M` / `E` / `C` | Spotify / Proton Mail / Proton Calendar (webapps) |
 | `Super + Space` | Launcher |
 | `Super + Alt + Space` | Control center |
 | `Super + Ctrl + Space` | Wallpaper picker |
