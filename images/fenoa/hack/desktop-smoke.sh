@@ -179,6 +179,17 @@ for theme in org.gtk.Gtk3theme.adw-gtk3 org.gtk.Gtk3theme.adw-gtk3-dark; do
     *) no "Flatpak preinstall lacks $theme (Branch=3.22, IsRuntime=true)" ;;
   esac
 done
+# Webapps: GTK trusts the hicolor cache over the directory, so an icon the cache lacks is invisible.
+# The cache stores names NUL-terminated, sometimes right after a printable offset byte, so match the
+# name up to its terminator only.
+icon_cache="$(LC_ALL=C tr -c '[:print:]' '\n' </usr/share/icons/hicolor/icon-theme.cache 2>/dev/null || true)"
+for app in spotify chess proton-mail proton-calendar; do
+  [[ -f /usr/share/applications/fenoa-webapp-$app.desktop ]] && ok "webapp: $app" || no "webapp $app missing"
+  case $icon_cache$'\n' in
+    *"fenoa-webapp-$app"$'\n'*) ok "the hicolor icon cache lists fenoa-webapp-$app" ;;
+    *) no "the hicolor icon cache lacks fenoa-webapp-$app (rebuild it after the desktop overlay)" ;;
+  esac
+done
 mono="$(fc-match -f '%{family}' monospace 2>/dev/null || true)"
 case $mono in "Source Code Pro"*) ok "monospace resolves to Source Code Pro (system-wide, so the greeter can use it)" ;; *) no "monospace resolves to '${mono:-?}', not Source Code Pro" ;; esac
 zone="$(firewall-offline-cmd --get-default-zone 2>/dev/null || true)"

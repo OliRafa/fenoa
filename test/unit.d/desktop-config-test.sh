@@ -297,6 +297,37 @@ done < <(sed -n 's/^[^=]*=\(.*\)\.desktop$/\1/p' "$mime" | sort -u)
 grep -qF 'x-scheme-handler/https=com.brave.Browser.desktop' "$mime" || fail "Brave is the default browser"
 pass "the Flatpak default apps in mimeapps are all preinstalled"
 
+# --- Webapps ---------------------------------------------------------------------------------------
+
+# Each webapp is a launcher for a Brave app window. Brave names that window's Wayland app_id after
+# the --app URL (brave-HOST__-Default for a site's root), and Noctalia matches windows to launchers
+# by StartupWMClass, so the two have to agree or the window shows Brave's icon instead.
+icons="$D/usr/share/icons/hicolor/scalable/apps"
+for app in spotify chess proton-mail proton-calendar; do
+  [[ -f "$D/usr/share/applications/fenoa-webapp-$app.desktop" ]] || fail "the $app webapp ships"
+done
+for entry in "$D"/usr/share/applications/fenoa-webapp-*.desktop; do
+  name=$(basename "$entry")
+  if command -v desktop-file-validate >/dev/null 2>&1; then
+    out=$(desktop-file-validate "$entry" 2>&1) || fail "$name is a valid desktop entry" "$out"
+  fi
+  url=$(sed -n 's|^Exec=flatpak run com\.brave\.Browser --app=\(https://[^ ]*\)$|\1|p' "$entry")
+  [[ -n $url ]] || fail "$name opens a site in a Brave app window" "$(grep '^Exec=' "$entry")"
+  host=${url#https://}
+  [[ $host == */ && $host != */*/ ]] || fail "$name opens a site's root (its window class depends on the path)" "$url"
+  host=${host%/}
+  grep -qx "StartupWMClass=brave-${host}__-Default" "$entry" ||
+    fail "$name's StartupWMClass matches Brave's app window class (brave-${host}__-Default)"
+  icon=$(sed -n 's/^Icon=//p' "$entry")
+  [[ -n $icon && -f "$icons/$icon.svg" ]] || fail "$name's icon ships in hicolor/scalable/apps" "Icon=$icon"
+done
+grep -qF '[Flatpak Preinstall com.brave.Browser]' "$manifest" || fail "the webapps' browser, Brave, is preinstalled"
+overlay_at=$(grep -nx 'COPY system/desktop/ /' "$containerfile" | cut -d: -f1)
+cache_at=$(grep -nF 'gtk-update-icon-cache -f /usr/share/icons/hicolor' "$containerfile" | tail -1 | cut -d: -f1)
+[[ -n $overlay_at && -n $cache_at ]] && (( cache_at > overlay_at )) ||
+  fail "the Containerfile rebuilds the hicolor icon cache after the desktop overlay adds icons"
+pass "the webapps (Spotify, Chess.com, Proton Mail, Proton Calendar) open in Brave app windows with their own icons"
+
 # --- packages --------------------------------------------------------------------------------------
 
 packages="$ROOT/packages/desktop.packages"

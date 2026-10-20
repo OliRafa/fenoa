@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Proton Mail
+GenericName=Email
+Comment=Proton Mail in its own Brave window
+Exec=flatpak run com.brave.Browser --app=https://mail.proton.me/
+Icon=fenoa-webapp-proton-mail
+StartupWMClass=brave-mail.proton.me__-Default
+Categories=Network;Email;
+Keywords=mail;email;
+StartupNotify=true

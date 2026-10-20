@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Chess.com
+GenericName=Chess
+Comment=Chess.com in its own Brave window
+Exec=flatpak run com.brave.Browser --app=https://www.chess.com/
+Icon=fenoa-webapp-chess
+StartupWMClass=brave-www.chess.com__-Default
+Categories=Game;BoardGame;
+Keywords=chess;
+StartupNotify=true
