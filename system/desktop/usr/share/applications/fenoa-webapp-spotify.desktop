@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Spotify
+GenericName=Music Player
+Comment=Spotify's web player in its own Brave window
+Exec=flatpak run com.brave.Browser --app=https://open.spotify.com/
+Icon=fenoa-webapp-spotify
+StartupWMClass=brave-open.spotify.com__-Default
+Categories=AudioVideo;Audio;Player;
+Keywords=music;
+StartupNotify=true

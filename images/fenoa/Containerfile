@@ -356,12 +356,17 @@ RUN set -eux; \
 #     (/usr/share/fenoa/noctalia) that the thin user configs in /etc/skel pull in; greetd + greeter
 #     config, its state-directory tmpfiles entry and SELinux label; the greeter-sync polkit rule; session
 #     environment, portal routing, default terminal and default apps; the Flatpak app set; the
-#     keyboard-backlight and lid helpers; and 50-fenoa-desktop.preset, which keeps greetd and
-#     graphical.target through a first boot's preset pass.
+#     webapp launchers (Brave app windows) and their icons; the keyboard-backlight and lid helpers;
+#     and 50-fenoa-desktop.preset, which keeps greetd and graphical.target through a first boot's
+#     preset pass.
 #     Copied after the packages so /etc/greetd/config.toml replaces the package's agreety default.
+#     The hicolor icon cache was built by the package scriptlets before the webapp icons arrived, and
+#     GTK trusts it as long as the theme's top directory is no newer than it, which adding a file to
+#     scalable/apps does not change: rebuild it, or GTK apps never find those icons.
 COPY system/desktop/ /
 RUN set -eux; \
     chmod 0755 /usr/bin/fenoa-kbd-backlight /usr/bin/fenoa-hypr-clamshell /usr/libexec/fenoa-greeter-session; \
+    gtk-update-icon-cache -f /usr/share/icons/hicolor; \
     getent passwd greetd >/dev/null || { echo "[D4] greetd's greeter account is missing"; exit 1; }; \
     [ -x /usr/bin/noctalia-greeter-session ] || { echo "[D4] noctalia-greeter-session missing"; exit 1; }; \
     [ -x /usr/bin/lua ] || { echo "[D4] lua missing: fenoa-greeter-session cannot give the greeter the session's layout"; exit 1; }; \

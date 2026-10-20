@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Proton Calendar
+GenericName=Calendar
+Comment=Proton Calendar in its own Brave window
+Exec=flatpak run com.brave.Browser --app=https://calendar.proton.me/
+Icon=fenoa-webapp-proton-calendar
+StartupWMClass=brave-calendar.proton.me__-Default
+Categories=Office;Calendar;
+Keywords=calendar;events;
+StartupNotify=true
