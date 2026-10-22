@@ -82,20 +82,26 @@ Defined in `/usr/share/fenoa/hypr/fenoa/bindings.lua`. Override or add bindings 
 | `Super + W` / `Super + Q` | Close window |
 | `Super + T` | Toggle floating |
 | `Super + F` / `Super + Alt + F` | Fullscreen / maximize |
+| `Super + Ctrl + F` | Tiled fullscreen: the app goes fullscreen (no tabs or toolbars) inside its tile |
+| `Super + O` | Pop the window out: floating, centred and pinned on top across workspaces; again to put it back |
+| `Ctrl + Alt + Delete` | Close all windows (apps with unsaved work can still ask), then go to workspace 1 |
 | `Super + J` | Toggle split |
 | `Super + P` | Pseudo-tile |
 | `Super + Arrows` | Focus |
 | `Super + Shift + Arrows` | Swap windows |
-| `Super + -` / `Super + =` (`Shift` for vertical) | Resize |
+| `Super + -` / `Super + =` (`Shift` for vertical) | Resize (add `Alt` for small steps, `Ctrl` for large ones) |
 | `Super + drag` / `Super + right-drag` | Move / resize with the mouse |
-| `Super + G`, `Super + Alt + G` | Group / ungroup; `Super + Alt + Tab` cycles the group |
+| `Super + G`, `Super + Alt + G` | Group / ungroup; `Super + Alt + Tab`, `Super + Ctrl + Left/Right` or `Super + Alt + scroll` cycle the group, `Super + Alt + 1…5` jump to a window in it |
+| `Super + Alt + Arrows` | Move the window into the group that way |
 | `Super + 1…0` | Workspace 1–10 |
 | `Super + Shift + 1…0` | Move window to workspace (`Alt` too: stay put) |
 | `Super + Tab` / `Super + Shift + Tab` / `Super + Ctrl + Tab` | Next / previous / last workspace |
 | Three-finger horizontal swipe | Switch workspace |
-| `Super + S` / `Super + Alt + S` | Scratchpad / send window to it |
-| `Super + Shift + Alt + Left/Right` | Move workspace to another monitor |
-| `Ctrl + Alt + Tab` | Focus the next monitor |
+| `Super + S` / `Super + Alt + S` (or `` Super + ` `` / `` Super + Shift + ` ``) | Scratchpad / send window to it |
+| `Super + Shift + Alt + Arrows` | Move the workspace to the monitor that way |
+| `Super + Shift + Ctrl + Arrows` | Move the window to the monitor that way (to the workspace it shows) |
+| `Ctrl + Alt + Tab` / `Ctrl + Alt + Shift + Tab` | Focus the next / previous monitor |
+| `Super + Ctrl + Z` / `Super + Ctrl + Alt + Z` | Zoom in around the cursor / reset the zoom |
 
 ## Configuration
 

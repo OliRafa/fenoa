@@ -218,6 +218,41 @@ else
   pass "skipped Hyprland --verify-config (Hyprland not installed; desktop-smoke.sh runs it in the image)"
 fi
 
+# --- one binding per key ---------------------------------------------------------------------------
+
+# Two bindings on one chord both fire, and --verify-config accepts that. Run bindings.lua against a
+# stub `hl` that prints every chord it binds, modifiers sorted: the monitor and group keys are built
+# in loops, which a grep would miss.
+lua_bin=$(command -v lua5.4 || command -v lua || true)
+if [[ -n $lua_bin ]]; then
+  chords=$("$lua_bin" - "$hypr" <<'LUA' 2>&1
+local dir = arg[1]
+package.path = dir .. "/?.lua;" .. package.path
+local stub
+stub = setmetatable({}, { __index = function() return stub end, __call = function() return stub end })
+hl = setmetatable({
+  bind = function(keys)
+    local parts = {}
+    for part in keys:gmatch("[^+]+") do
+      parts[#parts + 1] = (part:gsub("^%s+", ""):gsub("%s+$", ""):upper())
+    end
+    local key = table.remove(parts)
+    table.sort(parts)
+    parts[#parts + 1] = key
+    print(table.concat(parts, " + "))
+  end,
+}, { __index = function() return stub end })
+dofile(dir .. "/fenoa/bindings.lua")
+LUA
+  ) || fail "bindings.lua runs against a stub hl" "$chords"
+  (( $(wc -l <<<"$chords") > 100 )) || fail "the stub saw every binding (else this check proves nothing)" "$chords"
+  dupes=$(sort <<<"$chords" | uniq -d)
+  [[ -z $dupes ]] || fail "no two bindings share a chord" "$dupes"
+  pass "no two bindings share a chord ($(wc -l <<<"$chords") bindings)"
+else
+  pass "skipped the one-binding-per-chord check (no lua interpreter on PATH)"
+fi
+
 # --- bindings ↔ helpers ----------------------------------------------------------------------------
 
 while read -r helper; do

@@ -81,6 +81,46 @@ bind("SUPER + T", "Toggle floating", hl.dsp.window.float({ action = "toggle" }))
 bind("SUPER + F", "Fullscreen", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
 bind("SUPER + ALT + F", "Maximize", hl.dsp.window.fullscreen({ mode = "maximized" }))
 
+-- The app goes fullscreen (a browser drops its tabs and toolbar, a video fills the window) but stays
+-- in its tile: Hyprland keeps the window as it is and only tells the client it is fullscreen.
+bind("SUPER + CTRL + F", "Tiled fullscreen", function()
+  local window = hl.get_active_window()
+  if window then
+    local client = window.fullscreen_client == 2 and 0 or 2
+    hl.dispatch(hl.dsp.window.fullscreen_state({ internal = 0, client = client }))
+  end
+end)
+
+-- Pop a window out: floating, 1300x900, centred and pinned above every workspace on its monitor
+-- (a video, a call). Pressed on the popped-out window, it unpins it and puts it back in the tiling.
+bind("SUPER + O", "Pop window out", function()
+  local window = hl.get_active_window()
+  if not window then
+    return
+  end
+  local target = "address:" .. window.address
+  if window.pinned then
+    hl.dispatch(hl.dsp.window.pin({ window = target }))
+    hl.dispatch(hl.dsp.window.float({ window = target, action = "toggle" }))
+    return
+  end
+  if not window.floating then
+    hl.dispatch(hl.dsp.window.float({ window = target, action = "toggle" }))
+  end
+  hl.dispatch(hl.dsp.window.resize({ window = target, x = 1300, y = 900 }))
+  hl.dispatch(hl.dsp.window.center({ window = target }))
+  hl.dispatch(hl.dsp.window.pin({ window = target }))
+  hl.dispatch(hl.dsp.window.alter_zorder({ window = target, mode = "top" }))
+end)
+
+-- Ask every window to close (an app with unsaved work can still ask first), then go to workspace 1.
+bind("CTRL + ALT + DELETE", "Close all windows", function()
+  for _, window in ipairs(hl.get_windows()) do
+    hl.dispatch(hl.dsp.window.close({ window = "address:" .. window.address }))
+  end
+  hl.dispatch(hl.dsp.focus({ workspace = "1" }))
+end)
+
 bind("SUPER + LEFT", "Focus left", hl.dsp.focus({ direction = "l" }))
 bind("SUPER + RIGHT", "Focus right", hl.dsp.focus({ direction = "r" }))
 bind("SUPER + UP", "Focus up", hl.dsp.focus({ direction = "u" }))
@@ -96,6 +136,14 @@ bind("SUPER + code:20", "Grow window left", hl.dsp.window.resize({ x = -100, y =
 bind("SUPER + code:21", "Shrink window left", hl.dsp.window.resize({ x = 100, y = 0, relative = true }))
 bind("SUPER + SHIFT + code:20", "Shrink window up", hl.dsp.window.resize({ x = 0, y = -100, relative = true }))
 bind("SUPER + SHIFT + code:21", "Grow window down", hl.dsp.window.resize({ x = 0, y = 100, relative = true }))
+bind("SUPER + ALT + code:20", "Grow window left a little", hl.dsp.window.resize({ x = -25, y = 0, relative = true }))
+bind("SUPER + ALT + code:21", "Shrink window left a little", hl.dsp.window.resize({ x = 25, y = 0, relative = true }))
+bind("SUPER + SHIFT + ALT + code:20", "Shrink window up a little", hl.dsp.window.resize({ x = 0, y = -25, relative = true }))
+bind("SUPER + SHIFT + ALT + code:21", "Grow window down a little", hl.dsp.window.resize({ x = 0, y = 25, relative = true }))
+bind("SUPER + CTRL + code:20", "Grow window left a lot", hl.dsp.window.resize({ x = -300, y = 0, relative = true }))
+bind("SUPER + CTRL + code:21", "Shrink window left a lot", hl.dsp.window.resize({ x = 300, y = 0, relative = true }))
+bind("SUPER + CTRL + SHIFT + code:20", "Shrink window up a lot", hl.dsp.window.resize({ x = 0, y = -300, relative = true }))
+bind("SUPER + CTRL + SHIFT + code:21", "Grow window down a lot", hl.dsp.window.resize({ x = 0, y = 300, relative = true }))
 
 bind("SUPER + mouse:272", "Move window", hl.dsp.window.drag(), { mouse = true })
 bind("SUPER + mouse:273", "Resize window", hl.dsp.window.resize(), { mouse = true })
@@ -104,6 +152,18 @@ bind("SUPER + G", "Toggle group", hl.dsp.group.toggle())
 bind("SUPER + ALT + G", "Move window out of group", hl.dsp.window.move({ out_of_group = true }))
 bind("SUPER + ALT + TAB", "Next window in group", hl.dsp.group.next())
 bind("SUPER + ALT + SHIFT + TAB", "Previous window in group", hl.dsp.group.prev())
+bind("SUPER + CTRL + LEFT", "Previous window in group", hl.dsp.group.prev())
+bind("SUPER + CTRL + RIGHT", "Next window in group", hl.dsp.group.next())
+bind("SUPER + ALT + mouse_down", "Next window in group", hl.dsp.group.next())
+bind("SUPER + ALT + mouse_up", "Previous window in group", hl.dsp.group.prev())
+bind("SUPER + ALT + LEFT", "Move window into group left", hl.dsp.window.move({ into_group = "l" }))
+bind("SUPER + ALT + RIGHT", "Move window into group right", hl.dsp.window.move({ into_group = "r" }))
+bind("SUPER + ALT + UP", "Move window into group above", hl.dsp.window.move({ into_group = "u" }))
+bind("SUPER + ALT + DOWN", "Move window into group below", hl.dsp.window.move({ into_group = "d" }))
+-- code:10..14 are the number row keys 1..5, whatever the layout.
+for index = 1, 5 do
+  bind("SUPER + ALT + code:" .. tostring(index + 9), "Window " .. index .. " in group", hl.dsp.group.active({ index = index }))
+end
 
 -- --- Workspaces -----------------------------------------------------------------------------------
 -- code:10..19 are the number row keys 1..0, whatever the layout.
@@ -123,7 +183,46 @@ bind("SUPER + mouse_up", "Previous workspace", hl.dsp.focus({ workspace = "e-1" 
 
 bind("SUPER + S", "Toggle scratchpad", hl.dsp.workspace.toggle_special("scratchpad"))
 bind("SUPER + ALT + S", "Move window to scratchpad", hl.dsp.window.move({ workspace = "special:scratchpad", follow = false }))
+-- code:49 is the ` key left of 1, whatever the layout.
+bind("SUPER + code:49", "Toggle scratchpad", hl.dsp.workspace.toggle_special("scratchpad"))
+bind("SUPER + SHIFT + code:49", "Move window to scratchpad", hl.dsp.window.move({ workspace = "special:scratchpad", follow = false }))
 
-bind("SUPER + SHIFT + ALT + LEFT", "Move workspace to left monitor", hl.dsp.workspace.move({ monitor = "l" }))
-bind("SUPER + SHIFT + ALT + RIGHT", "Move workspace to right monitor", hl.dsp.workspace.move({ monitor = "r" }))
+-- --- Monitors -------------------------------------------------------------------------------------
+-- Move the workspace, or the window, to the monitor in that direction (u and d for monitors stacked
+-- above one another). With no monitor that way the key does nothing, rather than hand Hyprland a
+-- move it can only fail. Hyprland 0.56 moves a window by workspace, not by monitor, so the window
+-- goes to the workspace the other monitor shows, and focus follows it.
+local function workspace_to_monitor(direction)
+  return function()
+    local target = hl.get_monitor(direction)
+    if target then
+      hl.dispatch(hl.dsp.workspace.move({ monitor = target.name }))
+    end
+  end
+end
+
+local function window_to_monitor(direction)
+  return function()
+    local target = hl.get_monitor(direction)
+    if target and target.active_workspace then
+      hl.dispatch(hl.dsp.window.move({ workspace = tostring(target.active_workspace.id) }))
+    end
+  end
+end
+
+for _, side in ipairs({ { "LEFT", "l", "left" }, { "RIGHT", "r", "right" }, { "UP", "u", "upper" }, { "DOWN", "d", "lower" } }) do
+  local key, direction, name = side[1], side[2], side[3]
+  bind("SUPER + SHIFT + ALT + " .. key, "Move workspace to " .. name .. " monitor", workspace_to_monitor(direction))
+  bind("SUPER + SHIFT + CTRL + " .. key, "Move window to " .. name .. " monitor", window_to_monitor(direction))
+end
 bind("CTRL + ALT + TAB", "Focus next monitor", hl.dsp.focus({ monitor = "+1" }))
+bind("CTRL + ALT + SHIFT + TAB", "Focus previous monitor", hl.dsp.focus({ monitor = "-1" }))
+
+-- --- Zoom -----------------------------------------------------------------------------------------
+-- Magnify around the cursor, one step per press; a config reload also resets it.
+bind("SUPER + CTRL + Z", "Zoom in", function()
+  hl.config({ cursor = { zoom_factor = (hl.get_config("cursor.zoom_factor") or 1) + 1 } })
+end)
+bind("SUPER + CTRL + ALT + Z", "Reset zoom", function()
+  hl.config({ cursor = { zoom_factor = 1 } })
+end)
