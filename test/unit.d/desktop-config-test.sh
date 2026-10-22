@@ -234,6 +234,18 @@ while read -r id; do
 done < <(grep -hoE 'launch\("[A-Za-z0-9._-]+\.desktop"' "$hypr"/fenoa/bindings.lua | sed -E 's/^launch\("//; s/"$//' | sort -u)
 pass "every desktop entry the bindings launch ships, in the overlay or as a preinstalled Flatpak"
 
+# launch_or_focus(ID, CLASS) focuses a window of CLASS before launching ID; if CLASS is not the class
+# the entry's window gets, every press opens another window.
+focus_binds=$(grep -hoE 'launch_or_focus\("[^"]+", "[^"]+"\)' "$hypr"/fenoa/bindings.lua || true)
+[[ -n $focus_binds ]] || fail "the bindings use launch_or_focus (else this check proves nothing)"
+while IFS='"' read -r _ id _ class _; do
+  entry="$D/usr/share/applications/$id"
+  [[ -f $entry ]] || fail "a launch_or_focus binding launches a desktop entry the overlay ships: $id"
+  grep -qx "StartupWMClass=$class" "$entry" ||
+    fail "launch_or_focus looks for the class $id's window gets ($class)" "$(grep '^StartupWMClass=' "$entry")"
+done <<<"$focus_binds"
+pass "every launch_or_focus binding looks for the class its desktop entry's window gets"
+
 # The Noctalia IPC verbs the bindings use (checked against `noctalia msg --help` from 5.2.1).
 known_verbs=" bar-toggle caffeine-toggle mic-mute media nightlight-toggle notification-clear-active notification-dnd-toggle notification-invoke-latest panel-toggle screenshot-fullscreen screenshot-region session settings-toggle volume-down volume-mute volume-up window-switcher brightness-down brightness-up "
 while read -r verb; do

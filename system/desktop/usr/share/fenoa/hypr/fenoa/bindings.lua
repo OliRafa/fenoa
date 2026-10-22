@@ -5,7 +5,7 @@
 -- too.
 
 local f = require("fenoa.helpers")
-local bind, launch, noctalia = f.bind, f.launch, f.noctalia
+local bind, launch, launch_or_focus, noctalia = f.bind, f.launch, f.launch_or_focus, f.noctalia
 
 -- --- Apps -----------------------------------------------------------------------------------------
 bind("SUPER + RETURN", "Terminal", launch("xdg-terminal-exec"))
@@ -16,6 +16,8 @@ bind("SUPER + SHIFT + N", "Editor", launch("xdg-terminal-exec nvim"))
 bind("SUPER + SHIFT + M", "Music", launch("fenoa-webapp-spotify.desktop"))
 bind("SUPER + SHIFT + E", "Email", launch("fenoa-webapp-proton-mail.desktop"))
 bind("SUPER + SHIFT + C", "Calendar", launch("fenoa-webapp-proton-calendar.desktop"))
+bind("SUPER + SHIFT + W", "WhatsApp",
+  launch_or_focus("fenoa-webapp-whatsapp.desktop", "brave-web.whatsapp.com__-Default"))
 
 -- --- Shell (Noctalia) -----------------------------------------------------------------------------
 bind("SUPER + SPACE", "Launcher", noctalia("panel-toggle launcher"))

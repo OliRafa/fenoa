@@ -25,7 +25,7 @@ Fenoa's session is Hyprland (Lua config) managed by uwsm, with Noctalia v5 as th
 | Files | Nautilus | |
 | Removable drives | udiskie | automounts USB drives and SD cards from session start |
 | Browser, images, PDF | Brave, Loupe, Evince (Flatpaks) | defaults in `/usr/share/applications/hyprland-mimeapps.list` |
-| Webapps | Brave app windows | Spotify, Chess.com, Proton Mail, Proton Calendar and WhatsApp in the launcher (`/usr/share/applications/fenoa-webapp-*.desktop`, icons from homarr-labs/dashboard-icons in hicolor). Each opens the site's root in its own window (`--app`) on Brave's default profile, so it shares Brave's logins. `StartupWMClass` is the class Brave gives that window (`brave-<host>__-Default`), which Noctalia uses to show the webapp's icon. The image rebuilds the hicolor icon cache after adding the icons, because GTK otherwise keeps the stale one |
+| Webapps | Brave app windows | Spotify, Chess.com, Proton Mail, Proton Calendar and WhatsApp in the launcher (`/usr/share/applications/fenoa-webapp-*.desktop`, icons from homarr-labs/dashboard-icons in hicolor). Each opens the site's root in its own window (`--app`) on Brave's default profile, so it shares Brave's logins. `StartupWMClass` is the class Brave gives that window (`brave-<host>__-Default`), which Noctalia uses to show the webapp's icon. WhatsApp's key brings its open window back instead of opening a second (`launch_or_focus` in `/usr/share/fenoa/hypr/fenoa/helpers.lua`, which looks for that class). The image rebuilds the hicolor icon cache after adding the icons, because GTK otherwise keeps the stale one |
 | Office, notes, file sharing | LibreOffice, Obsidian, LocalSend (Flatpaks) | LocalSend's port 53317 (TCP+UDP) is open in firewalld |
 | Screen recording / streaming | OBS Studio (Flatpak), wf-recorder | `wf-recorder -f out.mp4` records from a terminal |
 | Media | mpv + mpv-mpris | Noctalia's media controls see it over MPRIS |
@@ -46,6 +46,7 @@ Defined in `/usr/share/fenoa/hypr/fenoa/bindings.lua`. Override or add bindings 
 | `Super + Shift + F` | Files |
 | `Super + Shift + N` | Neovim in a terminal |
 | `Super + Shift + M` / `E` / `C` | Spotify / Proton Mail / Proton Calendar (webapps) |
+| `Super + Shift + W` | WhatsApp (webapp; focuses its window when it is already open) |
 | `Super + Space` | Launcher |
 | `Super + Alt + Space` | Control center |
 | `Super + Ctrl + Space` | Wallpaper picker |
