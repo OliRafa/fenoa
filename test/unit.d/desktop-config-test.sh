@@ -313,7 +313,7 @@ pass "the Flatpak default apps in mimeapps are all preinstalled"
 # the --app URL (brave-HOST__-Default for a site's root), and Noctalia matches windows to launchers
 # by StartupWMClass, so the two have to agree or the window shows Brave's icon instead.
 icons="$D/usr/share/icons/hicolor/scalable/apps"
-for app in spotify chess proton-mail proton-calendar; do
+for app in spotify chess proton-mail proton-calendar whatsapp; do
   [[ -f "$D/usr/share/applications/fenoa-webapp-$app.desktop" ]] || fail "the $app webapp ships"
 done
 for entry in "$D"/usr/share/applications/fenoa-webapp-*.desktop; do
@@ -336,7 +336,7 @@ overlay_at=$(grep -nx 'COPY system/desktop/ /' "$containerfile" | cut -d: -f1)
 cache_at=$(grep -nF 'gtk-update-icon-cache -f /usr/share/icons/hicolor' "$containerfile" | tail -1 | cut -d: -f1)
 [[ -n $overlay_at && -n $cache_at ]] && (( cache_at > overlay_at )) ||
   fail "the Containerfile rebuilds the hicolor icon cache after the desktop overlay adds icons"
-pass "the webapps (Spotify, Chess.com, Proton Mail, Proton Calendar) open in Brave app windows with their own icons"
+pass "the webapps (Spotify, Chess.com, Proton Mail, Proton Calendar, WhatsApp) open in Brave app windows with their own icons"
 
 # --- packages --------------------------------------------------------------------------------------
 

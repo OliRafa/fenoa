@@ -183,7 +183,7 @@ done
 # The cache stores names NUL-terminated, sometimes right after a printable offset byte, so match the
 # name up to its terminator only.
 icon_cache="$(LC_ALL=C tr -c '[:print:]' '\n' </usr/share/icons/hicolor/icon-theme.cache 2>/dev/null || true)"
-for app in spotify chess proton-mail proton-calendar; do
+for app in spotify chess proton-mail proton-calendar whatsapp; do
   [[ -f /usr/share/applications/fenoa-webapp-$app.desktop ]] && ok "webapp: $app" || no "webapp $app missing"
   case $icon_cache$'\n' in
     *"fenoa-webapp-$app"$'\n'*) ok "the hicolor icon cache lists fenoa-webapp-$app" ;;

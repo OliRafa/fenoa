@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=WhatsApp
+GenericName=Messenger
+Comment=WhatsApp Web in its own Brave window
+Exec=flatpak run com.brave.Browser --app=https://web.whatsapp.com/
+Icon=fenoa-webapp-whatsapp
+StartupWMClass=brave-web.whatsapp.com__-Default
+Categories=Network;InstantMessaging;Chat;
+Keywords=chat;messages;
+StartupNotify=true
