@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# Exits 0 when the laptop lid is shut, 1 otherwise. /usr/lib/pam.d/fenoa-fingerprint runs it through
+# pam_exec before pam_fprintd: with the lid shut the reader (the power button, on a Framework 13)
+# cannot be touched, and pam_fprintd would wait out its timeout before sudo or a polkit prompt asks
+# for the password.
+#
+# It runs inside sudo's and polkit's authentication: as the user for sudo, and for polkit in
+# polkit-agent-helper's sandbox and SELinux domain (policykit_auth_t), which may read /proc but may
+# not call logind. So it only reads the ACPI lid; a machine without one (a desktop) never counts as
+# shut, and anything it cannot read counts as open, which only ever means asking for the finger.
+
+lid_dir=${FENOA_ACPI_LID:-/proc/acpi/button/lid}
+
+shopt -s nullglob
+for state in "$lid_dir"/*/state; do
+  [[ -r $state && $(<"$state") == *closed* ]] && exit 0
+done
+exit 1

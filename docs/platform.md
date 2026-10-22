@@ -59,6 +59,32 @@ The login screen and Hyprland take their layout from the system through one reso
 - `InhibitDelayMaxSec=15` gives the lock screen time to engage before suspend when closing the lid also reconfigures displays.
 - The power key is handed to the compositor (`HandlePowerKey=ignore`), which opens the session menu.
 
+## Fingerprint reader
+
+fprintd and libfprint drive the reader (the Framework 13's is a Goodix match-on-chip sensor in the power button; touching it does not press the button). Nothing uses it until you enroll a finger:
+
+```sh
+fprintd-enroll            # your right index finger; -f left-index-finger (etc.) for another
+fprintd-verify            # check that it matches
+fprintd-delete "$USER"    # forget every enrolled finger
+```
+
+Where a finger works, once enrolled:
+
+- **Lock screen.** Noctalia asks fprintd itself, at the same time as the password field: touch the reader or type the password (`[lockscreen] fingerprint`, on by default). Across a suspend, fprintd suspends the reader and the lock screen starts listening again on resume, claiming the reader afresh if fprintd dropped it (Noctalia's `src/auth/fingerprint_authenticator.cpp`).
+- **sudo and polkit prompts** (and so `run0`). The reader is tried first and the password follows once it gives up, after three failed reads or 30 seconds. With the lid shut the reader cannot be touched, so the password is asked for straight away. sudo runs the whole stack again for each password attempt, so after a mistyped password it asks for the finger again first; and a script piping a password into `sudo -S` waits for the reader too while the lid is open.
+- A touch answers whichever prompt is waiting for it, so a program running as you could start sudo in the background and take a touch you meant for the lock screen. Such a program could already catch your password by wrapping sudo in your shell's config; the fingerprint adds no access it lacked.
+- **Not the login screen or a tty login.** A fingerprint login would leave the GNOME keyring locked, since only the password unlocks it, and noctalia-greeter has no fingerprint prompt. Not over SSH either: pam_fprintd skips remote sessions.
+
+How it is wired (step P4b): `/usr/lib/pam.d/fenoa-fingerprint` holds `pam_env` (a match ends the stack, `pam_setcred`'s pass included, before `system-auth`'s would run), the lid check and `pam_fprintd`, and the build includes it at the top of the auth stacks of `/etc/pam.d/sudo` (which `sudo -i` uses too) and `/usr/lib/pam.d/polkit-1`. It is an `include`, not a `substack`, so a match ends the whole stack. Fedora's `system-auth` is left alone (authselect without `with-fingerprint`), which keeps the login screen and the tty password-only. `pam_fprintd` steps aside for an account with no enrolled finger and for a machine without a reader, so every install carries the same stacks.
+
+The lid check, `/usr/libexec/fenoa-lid-closed`, runs through `pam_exec` and makes PAM skip `pam_fprintd` while the ACPI lid reads closed. For polkit it runs in `polkit-agent-helper`'s sandbox and SELinux domain (`policykit_auth_t`), which may read `/proc` but not call logind, so it reads `/proc/acpi/button/lid` only; without an ACPI lid (a desktop) the reader is always tried.
+
+- Enrolled fingers live in `/var/lib/fprint` (and, on a match-on-chip sensor, on the sensor), so image updates keep them.
+- `/etc/pam.d/sudo` is three-way merged like the rest of `/etc`: if you edited it, your copy stays and sudo does not ask for a finger until you add `auth include fenoa-fingerprint` above its first `auth` line. An `/etc/pam.d/polkit-1` of your own likewise replaces the image's polkit stack.
+- If enrolling fails, the reader may need a firmware update first: `fwupdmgr get-updates`.
+- If the reader stops answering after a resume, the password still works everywhere; `sudo systemctl restart fprintd` brings the reader back.
+
 ## Not done (and why)
 
 - **NVIDIA's proprietary driver.** It needs kernel modules built for each kernel (and signed, for Secure Boot); a separate image variant is the likely shape. Mesa's nouveau/NVK is in the image but untested.

@@ -116,6 +116,27 @@ RUN chmod 0755 /usr/libexec/fenoa-* /usr/lib/systemd/system-sleep/fenoa-* \
  && chmod 0440 /etc/sudoers.d/fenoa-* \
  && visudo -cf /etc/sudoers.d/fenoa-passwd-tries
 
+# P4b) Fingerprint for sudo and polkit, as a fallback-to-password: each stack includes
+#      /usr/lib/pam.d/fenoa-fingerprint (from the overlay) in front of its first auth line. sudo's is
+#      the sudo package's /etc/pam.d/sudo (sudo-i includes it); polkit's is the vendor
+#      /usr/lib/pam.d/polkit-1, edited in place so it keeps updating with the image while an admin's
+#      /etc/pam.d/polkit-1 still wins. Fail the build unless the include is each file's first auth
+#      line, or if the base ships an /etc/pam.d/polkit-1 that would hide the edited one.
+#      system-auth is left alone (authselect without with-fingerprint), so the login screen and the
+#      tty login stay password-only: a fingerprint login would leave the GNOME keyring locked, and
+#      noctalia-greeter has no fingerprint prompt, so it would sit on the reader before asking for
+#      the password. Noctalia's lock screen asks fprintd itself, next to the password.
+RUN set -eux; \
+    [ ! -e /etc/pam.d/polkit-1 ] || { echo "[P4b] /etc/pam.d/polkit-1 hides /usr/lib/pam.d/polkit-1"; exit 1; }; \
+    for f in /etc/pam.d/sudo /usr/lib/pam.d/polkit-1; do \
+      sed -i '0,/^auth[[:space:]]/s//auth       include      fenoa-fingerprint\n&/' "$f"; \
+      first="$(grep -m1 -E '^auth[[:space:]]' "$f" | tr -s ' \t' ' ')"; \
+      [ "$first" = "auth include fenoa-fingerprint" ] \
+        || { echo "[P4b] $f does not start its auth stack with fenoa-fingerprint"; exit 1; }; \
+    done; \
+    [ -x /usr/libexec/fenoa-lid-closed ] && [ -f "$(rpm --eval '%{_libdir}')/security/pam_fprintd.so" ] \
+      || { echo "[P4b] the lid check or pam_fprintd is missing"; exit 1; }
+
 # P5) composefs boot: rebuild the initramfs with bootc's dracut module.
 #     The base image's initramfs is built for the OSTREE backend: it ships ostree-prepare-root.service
 #     gated on ConditionKernelCommandLine=ostree and nothing that reads `composefs=`. Install with

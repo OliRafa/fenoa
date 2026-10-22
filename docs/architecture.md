@@ -26,6 +26,7 @@ The split follows one rule: the **platform** stage holds everything a non-graphi
 | P2 | remove Firefox | the browser is a Flatpak |
 | P3 | systemd-boot; remove rpm-ostree, bootupd, GRUB and shim (and with them GRUB's boot-success units); fail if any survive | composefs + systemd-boot install; see [platform.md](platform.md) |
 | P4 | `COPY system/platform/ /` | units, helpers, tuning drop-ins |
+| P4b | include `/usr/lib/pam.d/fenoa-fingerprint` at the top of the auth stacks of `/etc/pam.d/sudo` and `/usr/lib/pam.d/polkit-1`; fail unless it is each file's first auth line | an enrolled finger for sudo and polkit, the password as the fallback; `system-auth` stays as is, so the login screen and the tty stay password-only; see [platform.md](platform.md#fingerprint-reader) |
 | P5 | rebuild the initramfs with the `bootc` and `ostree` dracut modules | composefs pivot for an install, ostree pivot for a Fedora Atomic switched to Fenoa |
 | P6 | enable `fenoa-firstboot-user` (`systemd-firstboot` is static and needs no enabling) | the image ships no user |
 | P7 | ublue brew tree + Brewfile; baked Flathub remote; enable the provisioning units (the Flatpak preinstall and the Brewfile setup through their timers) | `/var` is seeded only on first boot; see [Provisioning and the network](#provisioning-and-the-network) |
@@ -49,8 +50,8 @@ The split follows one rule: the **platform** stage holds everything a non-graphi
 
 | Path | Owner | Notes |
 |---|---|---|
-| `/usr/lib/systemd/**` (including `system-preset`), `/usr/lib/sysctl.d`, `/usr/lib/udev/rules.d`, `/usr/lib/modprobe.d`, `/usr/lib/dracut/dracut.conf.d`, `/usr/lib/tmpfiles.d`, `/usr/lib/NetworkManager/conf.d`, `/usr/share/polkit-1/rules.d` | image | vendor drop-in paths: updates flow through `bootc upgrade` and an admin can still override in `/etc` |
-| `/etc/sudoers.d`, `/etc/docker/daemon.json`, `/etc/cups/cups-browsed.conf`, `/etc/greetd/config.toml`, `/etc/xdg-desktop-portal/hyprland-portals.conf`, `/etc/xdg/*` | image, merged | only where the consumer reads nothing else; `/etc` is three-way merged on upgrade, so a local edit sticks |
+| `/usr/lib/systemd/**` (including `system-preset`), `/usr/lib/sysctl.d`, `/usr/lib/udev/rules.d`, `/usr/lib/modprobe.d`, `/usr/lib/dracut/dracut.conf.d`, `/usr/lib/tmpfiles.d`, `/usr/lib/NetworkManager/conf.d`, `/usr/lib/pam.d`, `/usr/share/polkit-1/rules.d` | image | vendor drop-in paths: updates flow through `bootc upgrade` and an admin can still override in `/etc` |
+| `/etc/sudoers.d`, `/etc/pam.d/sudo` (the package's, with the fingerprint include added), `/etc/docker/daemon.json`, `/etc/cups/cups-browsed.conf`, `/etc/greetd/config.toml`, `/etc/xdg-desktop-portal/hyprland-portals.conf`, `/etc/xdg/*` | image, merged | only where the consumer reads nothing else; `/etc` is three-way merged on upgrade, so a local edit sticks |
 | `/usr/share/fenoa/hypr`, `/usr/share/fenoa/noctalia`, `/usr/share/fenoa/greeter` | image | desktop defaults, pulled in by the user's config |
 | `/etc/skel/.config/{hypr,noctalia}` | image → user | thin files seeded into a new home that load the `/usr/share/fenoa` defaults |
 | `/var/lib/fenoa` | runtime | first-boot markers |

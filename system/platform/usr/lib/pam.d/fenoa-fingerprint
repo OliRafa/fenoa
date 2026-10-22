@@ -1,0 +1,17 @@
+#%PAM-1.0
+# Fingerprint first, password as the fallback. sudo and polkit-1 `include` this ahead of their
+# password stack (images/fenoa/Containerfile, step P4b). It has to be include, not substack: a match
+# from pam_fprintd must end the caller's whole auth stack, and in a substack it would only end this
+# file.
+#
+# That match also ends pam_setcred's pass over the stack (as does sudo's cached timestamp), before
+# system-auth's pam_env would set the environment from /etc/environment, so it runs here first, as
+# system-auth has it.
+#
+# pam_fprintd lets an account with no enrolled finger, a machine without a reader and a remote
+# session through to the password. With the lid shut the reader cannot be touched: fenoa-lid-closed
+# exits 0 then, and success=1 skips pam_fprintd. quiet and quiet_log keep pam_exec from reporting the
+# open lid's exit status, to the user and to the journal, on every prompt.
+auth  required                    pam_env.so
+auth  [success=1 default=ignore]  pam_exec.so quiet quiet_log /usr/libexec/fenoa-lid-closed
+auth  sufficient                  pam_fprintd.so

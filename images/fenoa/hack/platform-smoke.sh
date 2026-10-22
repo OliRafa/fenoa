@@ -188,6 +188,45 @@ done
 visudo -cf /etc/sudoers.d/fenoa-passwd-tries >/dev/null 2>&1 && ok "sudoers drop-in parses" || no "sudoers drop-in invalid"
 [[ "$(stat -c %a /etc/sudoers.d/fenoa-passwd-tries 2>/dev/null)" == "440" ]] && ok "sudoers drop-in is 0440" || no "sudoers drop-in mode is not 0440"
 
+echo "== fingerprint for sudo and polkit, password as the fallback =="
+for p in fprintd fprintd-pam; do
+  rpm -q "$p" >/dev/null 2>&1 && ok "$p" || no "$p missing"
+done
+[[ -f /usr/share/dbus-1/system-services/net.reactivated.Fprint.service ]] \
+  && ok "fprintd is D-Bus activated" || no "fprintd has no D-Bus activation file (nothing would start it)"
+for m in pam_fprintd pam_exec; do
+  [[ -f /usr/lib64/security/$m.so ]] && ok "$m.so" || no "$m.so missing"
+done
+gate="$(awk '/^auth.*pam_exec\.so/ { print $NF }' /usr/lib/pam.d/fenoa-fingerprint 2>/dev/null)"
+[[ $gate == "/usr/libexec/fenoa-lid-closed" && -x $gate ]] && ok "fenoa-fingerprint's lid check ships executable" || no "fenoa-fingerprint runs '${gate:-nothing}', not an executable fenoa-lid-closed"
+# No ACPI lid in a container: the check must say "open", so the reader is tried.
+if [[ -x $gate ]] && ! "$gate"; then ok "the lid check reports open without an ACPI lid"; else no "the lid check reports a shut lid without an ACPI lid"; fi
+for f in /etc/pam.d/sudo /usr/lib/pam.d/polkit-1; do
+  first="$(grep -m1 -E '^auth[[:space:]]' "$f" 2>/dev/null | tr -s ' \t' ' ')"
+  [[ $first == "auth include fenoa-fingerprint" ]] && ok "$f starts its auth stack with fenoa-fingerprint" || no "$f's first auth line is '$first'"
+done
+[[ ! -e /etc/pam.d/polkit-1 ]] && ok "no /etc/pam.d/polkit-1 hides the image's polkit stack" || no "/etc/pam.d/polkit-1 hides /usr/lib/pam.d/polkit-1"
+# The login screen and tty logins stay password-only (system-auth carries no pam_fprintd).
+auth_fprintd="$(grep -lE '^[[:space:]]*auth.*pam_fprintd' /etc/pam.d/system-auth /etc/pam.d/password-auth /etc/pam.d/login 2>/dev/null || true)"
+[[ -z $auth_fprintd ]] && ok "system-auth, password-auth and login do not ask for a fingerprint" || no "pam_fprintd in: $auth_fprintd"
+# The stack as a whole: with no reader (no fprintd in a container) sudo still takes the password, and
+# only the right one.
+if useradd -m -G wheel fenoa-pam-test 2>/dev/null && echo 'fenoa-pam-test:Fenoa-smoke-1' | chpasswd 2>/dev/null; then
+  if runuser -u fenoa-pam-test -- sudo -S -k -p '' true <<<'Fenoa-smoke-1' >/dev/null 2>&1; then
+    ok "sudo authenticates with the password through the fingerprint stack"
+  else
+    no "sudo rejects the right password"
+  fi
+  if runuser -u fenoa-pam-test -- sudo -S -k -p '' true <<<'wrong-password' >/dev/null 2>&1; then
+    no "sudo accepts a wrong password"
+  else
+    ok "sudo rejects a wrong password"
+  fi
+  userdel -r fenoa-pam-test 2>/dev/null || true
+else
+  no "could not create a test user for the sudo check"
+fi
+
 echo "== first boot: the preset pass keeps every unit as built =="
 # A first boot makes systemd run a FULL `systemctl preset-all`: every unit is set to what the
 # presets say, and Fedora's 99-default-disable.preset disables anything they do not list. Do the same

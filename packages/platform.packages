@@ -46,6 +46,11 @@ cups-browsed
 cups-filters
 cups-pk-helper              # PolicyKit-authenticated printer administration
 
+# --- Fingerprint reader (sudo and polkit through /usr/lib/pam.d/fenoa-fingerprint; Noctalia's lock
+# screen asks fprintd directly) ---
+fprintd                     # D-Bus activated, nothing to enable
+fprintd-pam
+
 # --- Storage ---
 btrfs-progs
 dosfstools
