@@ -1,13 +1,17 @@
 #!/bin/bash
 
 # fenoa-bitwarden-browsers connects the Bitwarden extension in the Flatpak browsers to the Bitwarden
-# desktop app (a Flatpak too): Firefox needs only the native-messaging directory Bitwarden writes
-# into, Brave a manifest, two overrides and a socket symlink that Bitwarden cannot set up from its
-# sandbox. Exercised hermetically with fake Flatpak installations, a fake $HOME and a stub `flatpak`.
+# desktop app (a Flatpak too): Brave gets a manifest, two overrides and a socket symlink that
+# Bitwarden cannot set up from its sandbox; Firefox the native-messaging directory Bitwarden writes
+# into, and the same socket symlink and override. Exercised hermetically with fake Flatpak
+# installations, a fake $HOME and a stub `flatpak`.
 #
 # What was found on hardware, and is pinned here:
-#  - Brave's proxy looks for the socket in $XDG_CACHE_HOME/com.bitwarden.desktop first, which inside
-#    Brave is Brave's own cache: without the symlink there it finds nothing.
+#  - The proxy looks for the socket in $XDG_CACHE_HOME/com.bitwarden.desktop first, which inside a
+#    browser is the browser's own cache: without the symlink there, Brave's finds nothing.
+#  - Firefox's proxy otherwise uses the socket Bitwarden puts in Firefox's directory. The app numbers
+#    clients per socket in one shared table, so with Brave connected too their ids collided and the
+#    app dropped both connections every few seconds: every browser has to share one socket.
 #  - Every path handed to the sandbox is the canonical /var/home/<user> one, not the /home symlink.
 #  - The manifest runs desktop_proxy from current/active, so it follows Bitwarden's updates.
 # And what review found: Brave's sandbox can rewrite everything under its directory, and the helper
@@ -33,30 +37,35 @@ trap 'rm -rf "$test_tmp"' EXIT
 
 mock_bin="$test_tmp/bin"
 mkdir -p "$mock_bin"
-# `flatpak override --user` keeps the filesystems in $MOCK_OVERRIDES, one per line, and `--show`
-# prints them the way flatpak does: a [Context] group with a ;-terminated list. Each --show is
-# counted in $MOCK_SHOWS; with $MOCK_CHANGE set, the first one touches that stamp, as an install
-# landing while the helper runs would.
+# `flatpak override --user` keeps each app's filesystems in $MOCK_OVERRIDES.<app-id>, one per line,
+# and `--show` prints them the way flatpak does: a [Context] group with a ;-terminated list. Each
+# --show is logged in $MOCK_SHOWS with its app; with $MOCK_CHANGE set, the first one touches that
+# stamp, as an install landing while the helper runs would. As in flatpak, a path has one entry: adding
+# it with another mode replaces the old one.
 cat >"$mock_bin/flatpak" <<'SH'
 #!/bin/bash
 [[ $1 == "override" && $2 == "--user" ]] || exit 1
 shift 2
 if [[ $1 == "--show" ]]; then
-  printf 'show\n' >>"$MOCK_SHOWS"
+  printf 'show %s\n' "$2" >>"$MOCK_SHOWS"
   if [[ -n ${MOCK_CHANGE:-} && ! -e $MOCK_CHANGE.done ]]; then
     : >"$MOCK_CHANGE.done"
     sleep 0.1
     printf 'x' >"$MOCK_CHANGE"
   fi
-  if [[ -s $MOCK_OVERRIDES ]]; then
-    printf '[Context]\nfilesystems=%s\n' "$(tr '\n' ';' <"$MOCK_OVERRIDES")"
+  if [[ -s $MOCK_OVERRIDES.$2 ]]; then
+    printf '[Context]\nfilesystems=%s\n' "$(tr '\n' ';' <"$MOCK_OVERRIDES.$2")"
   fi
   exit 0
 fi
 printf 'override %s\n' "$*" >>"$MOCK_LOG"
+overrides="$MOCK_OVERRIDES.${*: -1}"
 for arg in "$@"; do
   if [[ $arg == --filesystem=* ]]; then
-    grep -qxF -- "${arg#--filesystem=}" "$MOCK_OVERRIDES" 2>/dev/null || printf '%s\n' "${arg#--filesystem=}" >>"$MOCK_OVERRIDES"
+    path="${arg#--filesystem=}"
+    grep -vxF -e "${path%:ro}" -e "${path%:ro}:ro" "$overrides" >"$overrides.new" 2>/dev/null
+    printf '%s\n' "$path" >>"$overrides.new"
+    mv "$overrides.new" "$overrides"
   fi
 done
 SH
@@ -83,7 +92,7 @@ deploy() {
 }
 
 reset() {
-  rm -rf "$real_home" "$system_flatpak" "$test_tmp/overrides" "$test_tmp/mock.log" "$test_tmp/shows"
+  rm -rf "$real_home" "$system_flatpak" "$test_tmp"/overrides.* "$test_tmp/mock.log" "$test_tmp/shows"
   mkdir -p "$real_home"
   : >"$test_tmp/mock.log"
 }
@@ -100,7 +109,12 @@ manifest="$hosts/com.8bit.bitwarden.json"
 bitwarden_data="$real_home/.var/app/com.bitwarden.desktop"
 sockets="$bitwarden_data/cache/com.bitwarden.desktop"
 link="$brave/cache/com.bitwarden.desktop"
-firefox_hosts="$real_home/.var/app/org.mozilla.firefox/.mozilla/native-messaging-hosts"
+firefox="$real_home/.var/app/org.mozilla.firefox"
+firefox_hosts="$firefox/.mozilla/native-messaging-hosts"
+firefox_link="$firefox/cache/com.bitwarden.desktop"
+brave_overrides="$test_tmp/overrides.com.brave.Browser"
+socket_override="~/.var/app/com.bitwarden.desktop/cache/com.bitwarden.desktop:ro"
+firefox_overrides="$test_tmp/overrides.org.mozilla.firefox"
 system_proxy="$system_flatpak/app/com.bitwarden.desktop/current/active/files/Bitwarden/desktop_proxy"
 user_proxy="$user_flatpak/app/com.bitwarden.desktop/current/active/files/Bitwarden/desktop_proxy"
 
@@ -127,17 +141,24 @@ pass "Brave's manifest runs desktop_proxy from current/active and allows the Web
 [[ $(readlink "$link") != *"$link_home"* ]] || fail "the symlink must not go through the /home symlink"
 pass "Brave's cache links com.bitwarden.desktop to the app's socket directory (canonical path)"
 
-overrides=$(cat "$test_tmp/overrides" 2>/dev/null)
+overrides=$(cat "$brave_overrides" 2>/dev/null)
 grep -qxF "$system_flatpak/app/com.bitwarden.desktop:ro" <<<"$overrides" ||
   fail "Brave can read Bitwarden's deployment, read-only" "$overrides"
-grep -qxF "~/.var/app/com.bitwarden.desktop/cache/com.bitwarden.desktop" <<<"$overrides" ||
-  fail "Brave can reach the app's socket directory (~ for every user)" "$overrides"
+# Connecting needs no write access; read-only, no browser can replace the socket the others use.
+grep -qxF "$socket_override" <<<"$overrides" ||
+  fail "Brave can reach the app's socket directory, read-only (~ for every user)" "$overrides"
 (( $(grep -c . <<<"$overrides") == 2 )) || fail "Brave gets those two overrides and nothing else" "$overrides"
-pass "Brave's overrides: Bitwarden's deployment read-only, and the socket directory"
+pass "Brave's overrides: Bitwarden's deployment and the socket directory, both read-only"
 
 [[ -d $firefox_hosts ]] || fail "Firefox's native-messaging-hosts directory is created for Bitwarden to fill"
 [[ -z $(ls -A "$firefox_hosts") ]] || fail "Firefox's directory is left for Bitwarden to fill"
-pass "Firefox gets the native-messaging-hosts directory Bitwarden writes into, and nothing else"
+pass "Firefox gets the native-messaging-hosts directory Bitwarden writes into, left for Bitwarden to fill"
+
+[[ -L $firefox_link && $(readlink "$firefox_link") == "$sockets" ]] ||
+  fail "Firefox's cache links to the socket directory Brave's does, so both proxies share one socket" "$(ls -l "$firefox_link" 2>&1)"
+[[ $(cat "$firefox_overrides" 2>/dev/null) == "$socket_override" ]] ||
+  fail "Firefox can reach the app's socket directory, read-only, and gets no other override" "$(cat "$firefox_overrides" 2>&1)"
+pass "Firefox's cache links to the same socket directory as Brave's, with the override to reach it"
 
 # --- idempotent -----------------------------------------------------------------------------------
 
@@ -148,7 +169,8 @@ run_tool || fail "a second run succeeds" "$(cat "$test_tmp/out.log")"
 [[ ! -s $test_tmp/mock.log ]] || fail "a second run adds no overrides" "$(cat "$test_tmp/mock.log")"
 [[ $(stat -c %Y.%i "$manifest") == "$before" ]] || fail "a second run leaves the manifest untouched"
 [[ ! -s $test_tmp/out.log ]] || fail "a second run has nothing to say" "$(cat "$test_tmp/out.log")"
-(( $(wc -l <"$test_tmp/shows") == 1 )) || fail "with no Flatpak change meanwhile, the helper runs once"
+# Each run looks at Brave's overrides once.
+(( $(grep -c com.brave.Browser "$test_tmp/shows") == 1 )) || fail "with no Flatpak change meanwhile, the helper runs once"
 pass "a second run changes nothing"
 
 # --- a Flatpak change while it runs ---------------------------------------------------------------
@@ -157,9 +179,17 @@ rm -f "$test_tmp/shows" "$system_flatpak/.changed.done"
 : >"$system_flatpak/.changed"
 MOCK_CHANGE="$system_flatpak/.changed" run_tool ||
   fail "the helper succeeds when a Flatpak change lands while it runs" "$(cat "$test_tmp/out.log")"
-(( $(wc -l <"$test_tmp/shows") == 2 )) ||
-  fail "a change to .changed while it runs makes it run again (the path unit does not watch meanwhile)" "$(wc -l <"$test_tmp/shows")"
+(( $(grep -c com.brave.Browser "$test_tmp/shows") == 2 )) ||
+  fail "a change to .changed while it runs makes it run again (the path unit does not watch meanwhile)" "$(cat "$test_tmp/shows")"
 pass "a Flatpak change that lands while it runs is caught by running again"
+
+# --- a read-write socket override ----------------------------------------------------------------
+
+printf '%s\n' "${socket_override%:ro}" >"$firefox_overrides"
+run_tool || fail "the helper succeeds over a read-write socket override" "$(cat "$test_tmp/out.log")"
+[[ $(cat "$firefox_overrides") == "$socket_override" ]] ||
+  fail "a read-write socket override (the first setup's) becomes read-only" "$(cat "$firefox_overrides")"
+pass "a read-write socket override is made read-only"
 
 # --- a directory where the symlink goes -----------------------------------------------------------
 
@@ -181,7 +211,14 @@ fi
 pass "a directory there holding anything else is left alone, and the unit fails"
 rm -rf "$link"
 
-# --- Brave's directory is not trusted -------------------------------------------------------------
+rm "$firefox_link"
+mkdir -p "$firefox_link"
+run_tool || fail "the helper succeeds over the empty directory Firefox's proxy made" "$(cat "$test_tmp/out.log")"
+[[ -L $firefox_link && $(readlink "$firefox_link") == "$sockets" ]] ||
+  fail "the empty directory in Firefox's cache is replaced by the symlink" "$(ls -ld "$firefox_link")"
+pass "the empty directory Firefox's proxy made in its cache is replaced by the symlink"
+
+# --- the browsers' directories are not trusted ----------------------------------------------------
 
 # Brave can rename its cache and put a symlink to ~/.var/app there: com.bitwarden.desktop under it
 # is then Bitwarden's whole data directory.
@@ -197,6 +234,43 @@ fi
 pass "a symlink for Brave's cache leading to ~/.var/app makes it stop, and Bitwarden's data stays"
 rm "$brave/cache"
 mv "$brave/cache.real" "$brave/cache"
+
+# Where nothing would stop it (an empty directory), only the guards keep it from writing there.
+empty="$test_tmp/empty"
+for browser in "$brave" "$firefox"; do
+  mkdir -p "$empty"
+  mv "$browser/cache" "$browser/cache.real"
+  ln -s "$empty" "$browser/cache"
+  if run_tool; then
+    fail "a cache symlinked to an empty directory fails the unit ($(basename "$browser"))" "$(cat "$test_tmp/out.log")"
+  fi
+  [[ -z $(ls -A "$empty") ]] || fail "nothing is written through a symlinked cache ($(basename "$browser"))" "$(ls -lA "$empty")"
+  rm "$browser/cache"
+  mv "$browser/cache.real" "$browser/cache"
+  run_tool || fail "the helper recovers once the cache is a directory again" "$(cat "$test_tmp/out.log")"
+done
+pass "nothing is written through a cache symlinked to an empty directory, in Brave or Firefox"
+
+mv "$firefox/.mozilla" "$firefox/.mozilla.real"
+ln -s "$empty" "$firefox/.mozilla"
+if run_tool; then
+  fail "a symlinked .mozilla fails the unit" "$(cat "$test_tmp/out.log")"
+fi
+[[ -z $(ls -A "$empty") ]] || fail "nothing is created through a symlinked .mozilla" "$(ls -lA "$empty")"
+pass "a symlinked .mozilla in Firefox's directory makes it stop, and nothing is created through it"
+rm "$firefox/.mozilla"
+mv "$firefox/.mozilla.real" "$firefox/.mozilla"
+
+mv "$firefox/cache" "$firefox/cache.real"
+ln -s "$real_home/.var/app" "$firefox/cache"
+if run_tool; then
+  fail "a symlinked cache in Firefox's directory fails the unit" "$(cat "$test_tmp/out.log")"
+fi
+[[ -f $bitwarden_data/config/Bitwarden/data.json && -d $bitwarden_data && ! -L $bitwarden_data ]] ||
+  fail "Bitwarden's data survives a symlinked Firefox cache"
+pass "a symlink for Firefox's cache leading to ~/.var/app makes it stop too, and Bitwarden's data stays"
+rm "$firefox/cache"
+mv "$firefox/cache.real" "$firefox/cache"
 
 elsewhere="$test_tmp/elsewhere"
 mkdir -p "$elsewhere"
@@ -237,8 +311,8 @@ pass "a manifest whose proxy no longer exists is replaced with ours"
 rm -rf "$system_flatpak/app/com.bitwarden.desktop"
 run_tool || fail "the helper succeeds once Bitwarden is gone" "$(cat "$test_tmp/out.log")"
 [[ ! -e $manifest ]] || fail "Brave's manifest goes with Bitwarden"
-[[ ! -L $link ]] || fail "the socket symlink goes with Bitwarden"
-pass "with Bitwarden gone, Brave's manifest and socket symlink are removed"
+[[ ! -L $link && ! -L $firefox_link ]] || fail "the socket symlinks go with Bitwarden"
+pass "with Bitwarden gone, Brave's manifest and both socket symlinks are removed"
 
 reset
 deploy "$system_flatpak" com.brave.Browser
@@ -246,7 +320,7 @@ mkdir -p "$hosts"
 printf '{"name":"com.8bit.bitwarden","path":"/opt/elsewhere/proxy","type":"stdio"}\n' >"$manifest"
 run_tool || fail "the helper succeeds without Bitwarden" "$(cat "$test_tmp/out.log")"
 [[ $(jq -r .path "$manifest") == "/opt/elsewhere/proxy" ]] || fail "without Bitwarden, a manifest that is not ours is left alone"
-[[ ! -s $test_tmp/overrides ]] || fail "without Bitwarden, Brave gets no overrides" "$(cat "$test_tmp/overrides")"
+[[ ! -s $brave_overrides ]] || fail "without Bitwarden, Brave gets no overrides" "$(cat "$brave_overrides")"
 pass "without Bitwarden, nothing is added and a manifest that is not ours stays"
 
 # --- overrides the user revoked -------------------------------------------------------------------
@@ -254,12 +328,12 @@ pass "without Bitwarden, nothing is added and a manifest that is not ours stays"
 reset
 deploy "$system_flatpak" com.bitwarden.desktop
 deploy "$system_flatpak" com.brave.Browser
-printf '!%s\n' "$system_flatpak/app/com.bitwarden.desktop" >"$test_tmp/overrides"
+printf '!%s\n' "$system_flatpak/app/com.bitwarden.desktop" >"$brave_overrides"
 run_tool || fail "the helper succeeds with a revoked override" "$(cat "$test_tmp/out.log")"
-! grep -qxF "$system_flatpak/app/com.bitwarden.desktop:ro" "$test_tmp/overrides" ||
-  fail "access the user revoked (--nofilesystem) is not granted again" "$(cat "$test_tmp/overrides")"
-grep -qxF "~/.var/app/com.bitwarden.desktop/cache/com.bitwarden.desktop" "$test_tmp/overrides" ||
-  fail "the override that was not revoked is still added" "$(cat "$test_tmp/overrides")"
+! grep -qxF "$system_flatpak/app/com.bitwarden.desktop:ro" "$brave_overrides" ||
+  fail "access the user revoked (--nofilesystem) is not granted again" "$(cat "$brave_overrides")"
+grep -qxF "$socket_override" "$brave_overrides" ||
+  fail "the override that was not revoked is still added" "$(cat "$brave_overrides")"
 grep -qF 'revoked' "$test_tmp/out.log" || fail "the helper says why it leaves the override out" "$(cat "$test_tmp/out.log")"
 pass "an override the user revoked stays revoked"
 
@@ -268,7 +342,7 @@ pass "an override the user revoked stays revoked"
 reset
 deploy "$system_flatpak" com.bitwarden.desktop
 run_tool || fail "the helper succeeds with Bitwarden alone" "$(cat "$test_tmp/out.log")"
-[[ ! -e $brave && ! -e $firefox_hosts ]] || fail "without the browsers, nothing is created for them"
+[[ ! -e $brave && ! -e $firefox ]] || fail "without the browsers, nothing is created for them"
 pass "without Brave or Firefox installed, nothing is created for them"
 
 reset
@@ -277,8 +351,8 @@ deploy "$system_flatpak" com.brave.Browser
 run_tool || fail "the helper succeeds with Bitwarden in the user installation" "$(cat "$test_tmp/out.log")"
 [[ $(jq -r .path "$manifest") == "$user_proxy" ]] ||
   fail "a user-installed Bitwarden's proxy is the one the manifest runs" "$(jq -r .path "$manifest")"
-grep -qxF "$user_flatpak/app/com.bitwarden.desktop:ro" "$test_tmp/overrides" ||
-  fail "Brave can read the user installation's Bitwarden" "$(cat "$test_tmp/overrides")"
+grep -qxF "$user_flatpak/app/com.bitwarden.desktop:ro" "$brave_overrides" ||
+  fail "Brave can read the user installation's Bitwarden" "$(cat "$brave_overrides")"
 pass "a Bitwarden in the user installation is found and handed to Brave"
 
 deploy "$system_flatpak" com.bitwarden.desktop
