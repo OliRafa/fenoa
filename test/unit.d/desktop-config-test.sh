@@ -153,9 +153,14 @@ pass "50-fenoa-desktop.preset covers greetd and graphical.target, read before Fe
 # stage enables with `systemctl --global` (which containerfile_units leaves out).
 global_units=$(printf '%s\n' "$desktop_stage" | sed -e '/^[[:space:]]*#/d' | sed -e ':a' -e '/\\$/N; s/\\\n//; ta' |
   grep -oE 'systemctl --global (enable|disable) [^;&|]*' | sed 's/--global //' || true)
-[[ -n $global_units ]] || fail "the desktop stage enables user units globally (librepods)"
+[[ -n $global_units ]] || fail "the desktop stage enables user units globally (librepods, fenoa-bitwarden-browsers)"
 check_preset "$D/usr/lib/systemd/user-preset/50-fenoa-desktop.preset" "$global_units"
-pass "user-preset/50-fenoa-desktop.preset covers the user units the desktop stage enables (librepods)"
+pass "user-preset/50-fenoa-desktop.preset covers the user units the desktop stage enables"
+# librepods.service comes from its build stage; Fenoa's own user units ship in the overlay.
+while read -r unit; do
+  [[ -z $unit || -f $D/usr/lib/systemd/user/$unit ]] || fail "the user unit the desktop stage enables ships: $unit"
+done < <(printf '%s\n' "$global_units" | containerfile_units enable | grep '^fenoa-')
+pass "every fenoa-* user unit the desktop stage enables ships in the overlay"
 check_machine_id_last desktop "$desktop_stage"
 pass "the desktop stage ships /etc/machine-id as uninitialized again, after its package installs"
 
@@ -338,11 +343,11 @@ builtin_ids=$(toml "$noctalia_defaults" 't["theme"]["templates"]["builtin_ids"]'
   fail "Noctalia's gtk3/gtk4 templates are on (they switch the GTK theme and color-scheme)" "builtin_ids: $builtin_ids"
 pass "the session exports QT_QPA_PLATFORMTHEME=gtk3, and Noctalia's gtk templates drive the theme"
 
-for app in com.brave.Browser org.gnome.Loupe org.gnome.Evince org.libreoffice.LibreOffice md.obsidian.Obsidian \
-           org.localsend.localsend_app com.obsproject.Studio; do
+for app in com.brave.Browser com.bitwarden.desktop org.gnome.Loupe org.gnome.Evince org.libreoffice.LibreOffice \
+           md.obsidian.Obsidian org.localsend.localsend_app com.obsproject.Studio; do
   grep -qF "[Flatpak Preinstall $app]" "$manifest" || fail "the Flatpak set includes $app"
 done
-pass "the Flatpak set: Brave, Loupe, Evince, LibreOffice, Obsidian, LocalSend, OBS Studio"
+pass "the Flatpak set: Brave, Bitwarden, Loupe, Evince, LibreOffice, Obsidian, LocalSend, OBS Studio"
 
 while read -r app; do
   case $app in

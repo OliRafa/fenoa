@@ -4,3 +4,7 @@
 
 # The AirPods plugin's daemon (Containerfile D3c)
 enable librepods.service
+
+# Bitwarden's browser integration for the Flatpak browsers (Containerfile D4)
+enable fenoa-bitwarden-browsers.service
+enable fenoa-bitwarden-browsers.path

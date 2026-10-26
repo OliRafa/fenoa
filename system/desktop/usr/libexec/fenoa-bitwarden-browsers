@@ -1,0 +1,258 @@
+#!/bin/bash
+# fenoa-bitwarden-browsers — lets the Bitwarden extension in the Flatpak browsers reach the Bitwarden
+# desktop app (also a Flatpak), so "Unlock with biometrics" works in the browser. Runs as the user,
+# from fenoa-bitwarden-browsers.service: at login, and after every Flatpak install, update or removal
+# (fenoa-bitwarden-browsers.path watches the .changed stamp flatpak touches once each one is done).
+#
+# The extension reaches the app through native messaging: the browser starts Bitwarden's
+# desktop_proxy, which it finds through a com.8bit.bitwarden.json manifest in its own directory, and
+# the proxy connects to a socket the app listens on. The app writes the manifest, a copy of the proxy
+# and the socket itself, but only for the Flatpak browsers it knows, and only into directories that
+# already exist:
+#
+#  - Firefox: known, but Bitwarden 2026.10 writes only if ~/.var/app/org.mozilla.firefox/.mozilla/
+#    native-messaging-hosts exists, and Firefox (its profile now under config/mozilla) never creates
+#    it. Firefox still reads manifests from ~/.mozilla, which the Flatpak keeps in that .mozilla.
+#    Creating the directory is all it needs: Bitwarden fills it the next time it starts. (Bitwarden's
+#    main branch creates it itself; this does nothing once it does.)
+#  - Brave: unknown to Bitwarden (bitwarden/clients#21519), and Bitwarden's sandbox cannot write into
+#    Brave's directories anyway. So this does from Brave's side what the app does for the others:
+#     1. a manifest in Brave's NativeMessagingHosts that runs desktop_proxy straight from Bitwarden's
+#        current deployment, so it follows Bitwarden's updates (the proxy needs only libc, libm and
+#        libgcc_s, which Brave's runtime has);
+#     2. Brave overrides: read-only access to that deployment, and access to the app's socket
+#        directory;
+#     3. a symlink from Brave's cache to that directory: the proxy looks for the socket in
+#        $XDG_CACHE_HOME/com.bitwarden.desktop first, and inside Brave that is Brave's own cache.
+#     Nothing here lets Brave run anything outside its sandbox (no flatpak-spawn --host).
+#    A manifest that runs some other proxy that exists (Bitwarden's own, should it ever support
+#    Flatpak Brave) is left alone, and so is an override the user revoked.
+#
+# Everything under ~/.var/app/com.brave.Browser can be rewritten from inside Brave's sandbox, and
+# this runs outside it, so nothing there is trusted: a symlink on the way to what it touches makes it
+# stop instead of following, the manifest is read only as a small regular file, and the most it ever
+# removes there is its own manifest, the socket symlink, or the proxy's log and its empty directory.
+#
+# The desktop app has to be running, with "Allow browser integration" on. A Brave that is already
+# running sees the overrides only once it restarts. With Bitwarden gone, the Brave manifest and
+# symlink go too; the overrides stay, and point at nothing.
+set -uo pipefail
+
+log() { printf 'fenoa-bitwarden-browsers: %s\n' "$1"; }
+
+# The paths are overridable so the logic is testable without Flatpak
+# (test/unit.d/bitwarden-browsers-test.sh); the defaults are what the unit uses. The user
+# installation is the one fenoa-bitwarden-browsers.path watches; one an XDG_DATA_HOME moved elsewhere
+# is not followed.
+# Inside the sandbox $HOME is the canonical /var/home/<user>, not the /home symlink, and the symlink
+# is resolved there: point it at the canonical path.
+home=$(readlink -f "$HOME")
+system_flatpak="${FENOA_FLATPAK_SYSTEM_DIR:-/var/lib/flatpak}"
+user_flatpak="${FENOA_FLATPAK_USER_DIR:-$home/.local/share/flatpak}"
+
+proxy_in_app=files/Bitwarden/desktop_proxy
+bitwarden_sockets="$home/.var/app/com.bitwarden.desktop/cache/com.bitwarden.desktop"
+# The override has to name the socket directory per user, which flatpak expands from ~.
+# shellcheck disable=SC2088
+bitwarden_sockets_override="~/.var/app/com.bitwarden.desktop/cache/com.bitwarden.desktop"
+brave="$home/.var/app/com.brave.Browser"
+brave_manifest="$brave/config/BraveSoftware/Brave-Browser/NativeMessagingHosts/com.8bit.bitwarden.json"
+brave_sockets="$brave/cache/com.bitwarden.desktop"
+proxy_log=s.bitwarden.log
+firefox_hosts="$home/.var/app/org.mozilla.firefox/.mozilla/native-messaging-hosts"
+
+# The app's directory in the installation that has it deployed, or nothing. The user installation
+# comes first, as it does for `flatpak run`, so the proxy is the one of the app that runs.
+app_dir() {
+  local installation
+  for installation in "$user_flatpak" "$system_flatpak"; do
+    if [[ -e $installation/app/$1/current/active ]]; then
+      printf '%s\n' "$installation/app/$1"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Whether every directory between Brave's own and PATH is a real directory (or not there yet), so
+# nothing written or removed at PATH lands outside Brave's directory.
+inside_brave() {
+  local dir=$brave part parts
+  [[ ! -L $brave ]] || return 1
+  IFS=/ read -ra parts <<<"$(dirname -- "${1#"$brave"/}")"
+  for part in "${parts[@]}"; do
+    [[ $part == "." ]] && continue
+    dir+="/$part"
+    [[ ! -L $dir ]] || return 1
+    [[ ! -e $dir || -d $dir ]] || return 1
+  done
+}
+
+# The manifest's text, only if it is a regular file of sane size: Brave can make it a FIFO, a device
+# or a symlink to one, and reading that would block this unit.
+brave_manifest_text() {
+  [[ -f $brave_manifest && ! -L $brave_manifest ]] || return 1
+  (( $(stat -c %s "$brave_manifest") <= 65536 )) || return 1
+  cat "$brave_manifest"
+}
+
+manifest_proxy() {
+  brave_manifest_text 2>/dev/null | jq -r '.path // empty' 2>/dev/null
+}
+
+# Ours runs desktop_proxy from a Bitwarden deployment; Bitwarden's own copies are named
+# .bitwarden_desktop_proxy.
+manifest_is_ours() {
+  [[ $(manifest_proxy) == */app/com.bitwarden.desktop/current/active/$proxy_in_app ]]
+}
+
+# The extension IDs Bitwarden itself allows (loadChromeIds in apps/desktop/src/main/
+# native-messaging.main.ts): the Chrome Web Store's, its beta's, and Edge's and Opera's stores'.
+brave_manifest_json() {
+  jq -n --arg path "$1" '{
+    name: "com.8bit.bitwarden",
+    description: "Bitwarden desktop <-> browser bridge",
+    path: $path,
+    type: "stdio",
+    allowed_origins: [
+      "chrome-extension://nngceckbapebfimnlniiiahkandclblb/",
+      "chrome-extension://hccnnhgbibccigepcmlgppchkpfdophk/",
+      "chrome-extension://jbkfoedolllekgbhcbcoahefnbanhhlh/",
+      "chrome-extension://ccnckbpmaceehanjmeomladnmlffdjgn/"
+    ]
+  }'
+}
+
+unwire_brave() {
+  if inside_brave "$brave_manifest" && manifest_is_ours; then
+    rm -f -- "$brave_manifest" && log "Bitwarden is gone: removed Brave's native messaging manifest"
+  fi
+  if inside_brave "$brave_sockets" && [[ -L $brave_sockets && $(readlink -- "$brave_sockets") == "$bitwarden_sockets" ]]; then
+    rm -f -- "$brave_sockets"
+  fi
+}
+
+write_brave_manifest() {
+  local proxy="$1" current json tmp
+
+  current=$(manifest_proxy)
+  if ! manifest_is_ours && [[ -n $current && -x $current ]]; then
+    log "Brave's Bitwarden manifest runs $current, not ours: leaving it"
+    return 0
+  fi
+
+  json=$(brave_manifest_json "$proxy") || { log "could not build Brave's manifest (jq)" >&2; return 1; }
+  [[ $(brave_manifest_text 2>/dev/null) == "$json" ]] && return 0
+  if [[ -d $brave_manifest && ! -L $brave_manifest ]]; then
+    log "$brave_manifest is a directory: not touching it" >&2
+    return 1
+  fi
+  mkdir -p -- "$(dirname -- "$brave_manifest")" || return 1
+  tmp=$(mktemp -- "$brave_manifest.XXXXXX") || return 1
+  # Brave could have swapped a directory for a symlink since inside_brave looked: the temp file has
+  # to have landed where the manifest goes. -T: a symlink or FIFO put in the manifest's place is
+  # replaced, never followed.
+  if [[ $(realpath -- "$(dirname -- "$tmp")") == "$(dirname -- "$brave_manifest")" ]] &&
+    printf '%s\n' "$json" >"$tmp" && chmod 0644 -- "$tmp" && mv -fT -- "$tmp" "$brave_manifest"; then
+    log "wrote Brave's native messaging manifest ($proxy)"
+  else
+    rm -f -- "$tmp"
+    log "could not write $brave_manifest" >&2
+    return 1
+  fi
+}
+
+link_brave_sockets() {
+  # The socket directory has to exist before Brave starts, or Flatpak has nothing to give it; the
+  # app creates it on its first start, which may come after Brave's.
+  mkdir -p -- "$bitwarden_sockets" "$brave/cache" || return 1
+  [[ $(readlink -- "$brave_sockets" 2>/dev/null) == "$bitwarden_sockets" ]] && return 0
+
+  # A proxy that ran before the symlink existed made a real directory here (it creates the one it
+  # looks in), holding at most its log. Anything else in it is not ours to remove.
+  if [[ -d $brave_sockets && ! -L $brave_sockets ]]; then
+    rm -f -- "$brave_sockets/$proxy_log"
+    if ! rmdir -- "$brave_sockets" 2>/dev/null; then
+      log "$brave_sockets holds more than the proxy's log: not replacing it with the socket symlink" >&2
+      return 1
+    fi
+  fi
+  [[ $(realpath -- "$brave/cache") == "$brave/cache" ]] || return 1
+  ln -sfn -- "$bitwarden_sockets" "$brave_sockets"
+}
+
+add_brave_overrides() {
+  local deployment="$1" filesystems wanted missing=()
+
+  filesystems=$(flatpak override --user --show com.brave.Browser 2>/dev/null | sed -n 's/^filesystems=//p')
+  for wanted in "$deployment:ro" "$bitwarden_sockets_override"; do
+    if [[ ";$filesystems" == *";!${wanted%:ro};"* ]]; then
+      log "Brave's access to ${wanted%:ro} was revoked in its overrides: leaving it revoked"
+    elif [[ ";$filesystems" != *";$wanted;"* ]]; then
+      missing+=("--filesystem=$wanted")
+    fi
+  done
+  (( ${#missing[@]} > 0 )) || return 0
+  if flatpak override --user "${missing[@]}" com.brave.Browser; then
+    log "gave Brave access to Bitwarden's proxy and socket (${missing[*]}); restart Brave if it is running"
+  else
+    log "could not add Brave's overrides (${missing[*]})" >&2
+    return 1
+  fi
+}
+
+wire_brave() {
+  local deployment="$1"
+
+  if ! inside_brave "$brave_manifest" || ! inside_brave "$brave_sockets"; then
+    log "a symlink or a non-directory on the way into $brave: not touching it" >&2
+    return 1
+  fi
+  write_brave_manifest "$deployment/current/active/$proxy_in_app" || return 1
+  link_brave_sockets || return 1
+  add_brave_overrides "$deployment"
+}
+
+connect() {
+  local bitwarden status=0
+
+  bitwarden=$(app_dir com.bitwarden.desktop) || bitwarden=""
+  if [[ -n $bitwarden && ! -x $bitwarden/current/active/$proxy_in_app ]]; then
+    log "Bitwarden's deployment has no $proxy_in_app: browser integration cannot be set up" >&2
+    unwire_brave
+    return 1
+  fi
+
+  if [[ -z $bitwarden ]]; then
+    unwire_brave
+    return 0
+  fi
+
+  if app_dir com.brave.Browser >/dev/null; then
+    wire_brave "$bitwarden" || status=1
+  fi
+
+  if app_dir org.mozilla.firefox >/dev/null && [[ ! -d $firefox_hosts ]]; then
+    if mkdir -p -- "$firefox_hosts"; then
+      log "created Firefox's native messaging directory; Bitwarden fills it the next time it starts"
+    else
+      status=1
+    fi
+  fi
+
+  return "$status"
+}
+
+# The path unit does not watch while this runs, and does not look again afterwards: a Flatpak change
+# that lands meanwhile (the first-boot preinstall makes several) is caught here, by running again.
+stamps() {
+  stat -c '%n %i %y' -- "$user_flatpak/.changed" "$system_flatpak/.changed" 2>/dev/null
+}
+
+for (( run = 1; run <= 5; run++ )); do
+  before=$(stamps)
+  connect
+  status=$?
+  [[ $(stamps) == "$before" ]] && break
+done
+exit "$status"

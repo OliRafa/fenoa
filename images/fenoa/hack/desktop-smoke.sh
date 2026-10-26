@@ -163,13 +163,26 @@ case $lp_unit in
 esac
 [[ "$(systemctl --global is-enabled librepods.service 2>/dev/null)" == "enabled" ]] \
   && ok "librepods.service is enabled for every user" || no "librepods.service is not enabled globally"
+# Bitwarden: its unlock action (a Flatpak cannot install one) and the user units that connect the
+# extension in Brave and Firefox to the desktop app.
+policy="$(cat /usr/share/polkit-1/actions/com.bitwarden.Bitwarden.policy 2>/dev/null || true)"
+case $policy in
+  *'<action id="com.bitwarden.Bitwarden.unlock">'*) ok "Bitwarden's unlock polkit action ships" ;;
+  *) no "/usr/share/polkit-1/actions/com.bitwarden.Bitwarden.policy missing or without its action" ;;
+esac
+[[ -x /usr/libexec/fenoa-bitwarden-browsers ]] && ok "fenoa-bitwarden-browsers is executable" \
+  || no "/usr/libexec/fenoa-bitwarden-browsers missing or not executable"
+for u in fenoa-bitwarden-browsers.service fenoa-bitwarden-browsers.path; do
+  [[ "$(systemctl --global is-enabled "$u" 2>/dev/null)" == "enabled" ]] \
+    && ok "$u is enabled for every user" || no "$u is not enabled globally"
+done
 sh -n /usr/share/uwsm/env.d/10-fenoa 2>/dev/null && ok "uwsm env.d/10-fenoa parses" || no "uwsm env.d/10-fenoa missing or invalid"
 [[ "$(cat /etc/xdg/hyprland-xdg-terminals.list 2>/dev/null)" == "foot.desktop" ]] && ok "default terminal: foot" || no "hyprland-xdg-terminals.list not foot"
 [[ -f /usr/share/applications/foot.desktop ]] && ok "foot.desktop exists" || no "foot.desktop missing"
 mime="$(cat /usr/share/applications/hyprland-mimeapps.list 2>/dev/null || true)"
 case $mime in *"x-scheme-handler/https=com.brave.Browser.desktop"*) ok "https opens Brave" ;; *) no "https is not mapped to Brave" ;; esac
 manifest="$(cat /usr/share/flatpak/preinstall.d/fenoa.preinstall 2>/dev/null || true)"
-for app in com.brave.Browser org.gnome.Loupe org.gnome.Evince org.libreoffice.LibreOffice md.obsidian.Obsidian org.localsend.localsend_app com.obsproject.Studio; do
+for app in com.brave.Browser com.bitwarden.desktop org.gnome.Loupe org.gnome.Evince org.libreoffice.LibreOffice md.obsidian.Obsidian org.localsend.localsend_app com.obsproject.Studio; do
   case $manifest in *"[Flatpak Preinstall $app]"*) ok "Flatpak preinstall: $app" ;; *) no "Flatpak preinstall lacks $app" ;; esac
 done
 # GTK3 (and Qt) inside the sandbox follow light/dark only with both adw-gtk3 theme extensions.

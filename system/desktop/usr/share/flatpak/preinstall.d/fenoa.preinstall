@@ -19,6 +19,13 @@
 Branch=stable
 IsRuntime=false
 
+# Password manager. Its unlock polkit action ships in the image (/usr/share/polkit-1/actions), and
+# fenoa-bitwarden-browsers.service connects it to the Bitwarden extension in Brave and Firefox, which
+# Bitwarden cannot do itself from its sandbox (/usr/libexec/fenoa-bitwarden-browsers).
+[Flatpak Preinstall com.bitwarden.desktop]
+Branch=stable
+IsRuntime=false
+
 # Image viewer.
 [Flatpak Preinstall org.gnome.Loupe]
 Branch=stable

@@ -1,0 +1,16 @@
+[Unit]
+Description=Reconnect Bitwarden and the Flatpak browsers when Flatpak apps change
+# Like the service: not in the greeter's session.
+ConditionUser=!@system
+
+# flatpak touches .changed in an installation once an install, update or removal there is done.
+# Watching the app directory instead would start the service as soon as an app's directory appears,
+# before its deployment exists, and nothing after that would start it again. The system installation
+# is where the preinstall puts Bitwarden and Brave on first boot, usually during the first session.
+# A change while the service runs is not seen here; the helper looks at the stamps again itself.
+[Path]
+PathChanged=/var/lib/flatpak/.changed
+PathChanged=%h/.local/share/flatpak/.changed
+
+[Install]
+WantedBy=default.target

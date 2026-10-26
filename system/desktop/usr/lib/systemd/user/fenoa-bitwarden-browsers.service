@@ -1,0 +1,25 @@
+[Unit]
+Description=Connect the Flatpak browsers' Bitwarden extension to the Bitwarden desktop app
+Documentation=https://github.com/bitwarden/clients/issues/21519
+# /usr/libexec/fenoa-bitwarden-browsers explains what it sets up and why. It runs at login and from
+# fenoa-bitwarden-browsers.path after every Flatpak install, update or removal; each run checks the
+# whole state again and changes only what is missing, so it is not RemainAfterExit= (the path unit
+# could not start it again while it stayed active).
+#
+# Not for system accounts: the greeter's session (greetd, through pam_systemd) starts a user
+# manager too, and would get Brave and Bitwarden directories and a Flatpak user installation.
+ConditionUser=!@system
+# A burst of Flatpak changes (the first-boot preinstall, `flatpak uninstall --unused`) starts this
+# once per change. Under the default start limit the sixth start in 10s fails, and takes the path
+# unit down with it for the rest of the session. Each run is cheap and idempotent.
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/fenoa-bitwarden-browsers
+# A oneshot has no start timeout by default, and a hung run would stop the path unit from ever
+# starting it again this session.
+TimeoutStartSec=1min
+
+[Install]
+WantedBy=default.target

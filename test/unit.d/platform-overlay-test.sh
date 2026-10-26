@@ -32,10 +32,14 @@ pass "the platform overlay is copied before the initramfs rebuild"
 
 # --- units the Containerfile enables exist ------------------------------------------------------
 
+# The platform stage's only: the desktop stage's units (fenoa-bitwarden-browsers, a user unit) are
+# desktop-config-test.sh's.
+platform_stage=$(sed -n '/^FROM .* AS platform$/,/^FROM platform AS desktop$/p' "$containerfile")
+[[ -n $platform_stage ]] || fail "the Containerfile has a platform stage"
 while read -r unit; do
   [[ -f $overlay/usr/lib/systemd/system/$unit ]] || fail "enabled unit ships: $unit"
-done < <(grep -oE 'fenoa-[a-z0-9-]+\.(service|timer)' "$containerfile" | sort -u)
-pass "every fenoa-* unit the Containerfile enables ships in the overlay"
+done < <(grep -oE 'fenoa-[a-z0-9-]+\.(service|timer)' <<<"$platform_stage" | sort -u)
+pass "every fenoa-* unit the platform stage enables ships in the overlay"
 
 for f in "$overlay"/usr/lib/systemd/system/fenoa-*.service; do
   grep -qE '^ExecStart=' "$f" || fail "$(basename "$f") has an ExecStart"
@@ -48,8 +52,6 @@ pass "every fenoa-* service has an ExecStart whose helper ships"
 
 # --- presets: a first boot keeps every unit as built --------------------------------------------
 
-platform_stage=$(sed -n '/^FROM .* AS platform$/,/^FROM platform AS desktop$/p' "$containerfile")
-[[ -n $platform_stage ]] || fail "the Containerfile has a platform stage"
 [[ -n $(printf '%s\n' "$platform_stage" | containerfile_units enable) ]] ||
   fail "the platform stage's systemctl enables can be read (else the coverage check proves nothing)"
 check_preset "$overlay/usr/lib/systemd/system-preset/50-fenoa.preset" "$platform_stage"
