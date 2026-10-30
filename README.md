@@ -20,7 +20,7 @@ cosign verify ghcr.io/olirafa/fenoa:44 \
 
 - **Desktop:** Hyprland (Lua config) with Noctalia for the bar, launcher, control center, notifications, OSD, lock screen, idle handling, polkit prompts, clipboard history, screenshots, night light and wallpaper. Noctalia's palette (a built-in scheme, or one generated from your wallpaper) also colours native GTK apps (Nautilus, settings dialogs), foot and Hyprland's borders. Flatpak apps don't get the palette, but they do follow the light/dark switch: GTK3, GTK4/libadwaita and Qt apps on Flathub runtimes, and Firefox, Chromium and Electron apps whose own theme setting is "system" or "device".
 - **Login:** noctalia-greeter on greetd, styled like the shell (Noctalia syncs your wallpaper and palette to it). Your login password unlocks the GNOME keyring.
-- **Apps:** foot, Nautilus, mpv, wf-recorder, udiskie (USB automount), Docker and Homebrew in the image; Brave, Bitwarden, Loupe, Evince, LibreOffice, Obsidian, LocalSend and OBS Studio (Flathub) installed on first boot; shell and developer tools (starship, zoxide, fzf, eza, bat, ripgrep, fd, lazygit, btop, Neovim, tmux, gh, language toolchains) from the [Brewfile](Brewfile). Source Code Pro is the default monospace font.
+- **Apps:** foot, Nautilus, mpv, wf-recorder, udiskie (USB automount), Docker, Tailscale and Homebrew in the image; Brave, Bitwarden, Loupe, Evince, LibreOffice, Obsidian, LocalSend and OBS Studio (Flathub) installed on first boot; shell and developer tools (starship, zoxide, fzf, eza, bat, ripgrep, fd, lazygit, btop, Neovim, tmux, gh, language toolchains) from the [Brewfile](Brewfile). Source Code Pro is the default monospace font.
 - **PC hardware:** UEFI machines with AMD or Intel graphics, booted through systemd-boot on composefs (Secure Boot off), with Fedora's firmware, microcode and fwupd. A fingerprint reader libfprint supports unlocks the lock screen and answers sudo and polkit prompts once you enroll a finger (`fprintd-enroll`). See [docs/platform.md](docs/platform.md).
 
 ## Install
@@ -62,6 +62,7 @@ Fenoa's shell setup for the Brewfile's tools (the starship prompt, zoxide, fzf a
 - Your config is `~/.config/hypr/hyprland.lua` and `~/.config/noctalia/config.toml`; both load Fenoa's defaults from `/usr/share/fenoa` first, so image updates keep improving the defaults without touching your changes.
 - SSH is off: `sshd` is disabled and the firewall does not let it in. To log in remotely, run `sudo systemctl enable --now sshd` and `sudo firewall-cmd --permanent --add-service=ssh && sudo firewall-cmd --reload`.
 - Upgrading from an earlier Fenoa image switches SSH off as well; if you relied on it, run those two commands again after the upgrade.
+- Tailscale's daemon runs from boot; log in once with `sudo tailscale up --operator=$USER` (see [docs/platform.md](docs/platform.md#tailscale)).
 
 ## Update
 

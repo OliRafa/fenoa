@@ -35,7 +35,8 @@ enable brew-upgrade.timer
 # System services (P8). Fedora's presets enable most of these too; listing them keeps the image's
 # choice from depending on that. Fedora deliberately leaves cups.service to socket activation
 # (cups.socket, cups.path) and does not preset cups-browsed at all; Fenoa runs both from boot so
-# driverless network printers are discovered (/etc/cups/cups-browsed.conf).
+# driverless network printers are discovered (/etc/cups/cups-browsed.conf). No Fedora preset lists
+# tailscaled either, so without its line a first boot would disable it.
 enable NetworkManager.service
 enable bluetooth.service
 enable firewalld.service
@@ -47,3 +48,4 @@ enable cups-browsed.service
 enable docker.socket
 enable systemd-oomd.service
 enable fstrim.timer
+enable tailscaled.service

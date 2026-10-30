@@ -76,6 +76,29 @@ RUN retry() { n=1; while ! "$@"; do [ "$n" -ge 5 ] && return 1; echo "[dnf-retry
  && dnf clean all \
  && rm -f /tmp/platform.packages
 
+# P1b) Tailscale, from Tailscale's own repository: Fedora packages it too, but its build trails
+#      upstream by months, security fixes included (Universal Blue's images take Tailscale's
+#      repository for the same reason). The .repo file is Tailscale's; a dnf5 override restricts it
+#      to the tailscale package, so it can never replace a Fedora package, and ranks it above Fedora
+#      (priority=10), so Fedora's older build never wins. The repository signs its metadata
+#      (repo_gpgcheck), hence the explicit `makecache -y`, as in D1. Fail unless the installed build
+#      is Tailscale's. tailscaled is enabled in P8 and keeps its login in /var/lib/tailscale.
+RUN retry() { n=1; while ! "$@"; do [ "$n" -ge 5 ] && return 1; echo "[dnf-retry] attempt $n failed: $*"; dnf clean all || true; sleep $((n*5)); n=$((n+1)); done; }; \
+    set -eux; \
+    curl --retry 3 --retry-delay 2 -fL -o /etc/yum.repos.d/tailscale.repo \
+      https://pkgs.tailscale.com/stable/fedora/tailscale.repo; \
+    mkdir -p /etc/dnf/repos.override.d; \
+    printf '%s\n' '[tailscale-stable]' 'priority=10' 'includepkgs=tailscale' \
+      >/etc/dnf/repos.override.d/90-fenoa-tailscale.repo; \
+    retry dnf -y makecache --repo tailscale-stable; \
+    retry dnf -y install tailscale; \
+    packager="$(rpm -q --qf '%{PACKAGER}' tailscale)"; \
+    case "$packager" in \
+      "Tailscale Inc"*) ;; \
+      *) echo "[P1b] tailscale is not Tailscale's build (packager: $packager)"; exit 1 ;; \
+    esac; \
+    dnf clean all
+
 # P2) Drop the browser inherited from the base. base-atomic ships Firefox; Fenoa's browser is the
 #     Brave Flatpak (desktop stage manifest), so a native Firefox is dead weight and a second,
 #     unthemed browser. Best-effort: if a dependency ever holds it, log and continue.
@@ -240,7 +263,8 @@ RUN set -eux; \
 RUN set -eux; \
     systemctl enable NetworkManager.service bluetooth.service firewalld.service \
       systemd-resolved.service avahi-daemon.service power-profiles-daemon.service \
-      cups.service cups-browsed.service docker.socket systemd-oomd.service fstrim.timer; \
+      cups.service cups-browsed.service docker.socket systemd-oomd.service fstrim.timer \
+      tailscaled.service; \
     systemctl mask NetworkManager-wait-online.service; \
     if [ -f /usr/lib/systemd/system/sshd.service ]; then systemctl disable sshd.service; fi; \
     zone="$(firewall-offline-cmd --get-default-zone)"; \

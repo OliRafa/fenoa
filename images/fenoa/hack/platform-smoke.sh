@@ -149,10 +149,13 @@ brewsh="$(cat /etc/profile.d/brew.sh 2>/dev/null || true)"
 case $brewsh in *'PATH}:'*HOMEBREW_PREFIX*) ok "brew is appended to PATH, not prepended" ;; *) no "brew.sh missing or prepends brew" ;; esac
 
 echo "== system services =="
-for u in NetworkManager bluetooth firewalld systemd-resolved avahi-daemon power-profiles-daemon cups cups-browsed systemd-oomd; do
+for u in NetworkManager bluetooth firewalld systemd-resolved avahi-daemon power-profiles-daemon cups cups-browsed systemd-oomd tailscaled; do
   systemctl is-enabled "$u.service" >/dev/null 2>&1 && ok "$u enabled" || no "$u not enabled"
 done
 systemctl is-enabled docker.socket >/dev/null 2>&1 && ok "docker.socket enabled" || no "docker.socket not enabled"
+# Fedora's tailscale trails upstream; the image carries Tailscale's own build (P1b).
+ts_packager="$(rpm -q --qf '%{PACKAGER}' tailscale 2>/dev/null || true)"
+[[ $ts_packager == "Tailscale Inc"* ]] && ok "tailscale is Tailscale's build" || no "tailscale is not Tailscale's build (${ts_packager:-not installed})"
 [[ "$(readlink -f /etc/systemd/system/NetworkManager-wait-online.service)" == "/dev/null" ]] \
   && ok "NetworkManager-wait-online masked" || no "NetworkManager-wait-online not masked"
 

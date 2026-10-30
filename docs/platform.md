@@ -85,6 +85,17 @@ The lid check, `/usr/libexec/fenoa-lid-closed`, runs through `pam_exec` and make
 - If enrolling fails, the reader may need a firmware update first: `fwupdmgr get-updates`.
 - If the reader stops answering after a resume, the password still works everywhere; `sudo systemctl restart fprintd` brings the reader back.
 
+## Tailscale
+
+The `tailscale` package comes from Tailscale's own repository (step P1b), not Fedora's, whose build trails upstream by months, security fixes included; Universal Blue's images take it from there for the same reason. `tailscaled` starts at boot and stays logged out until you log in once:
+
+```sh
+sudo tailscale up --operator=$USER    # prints a login URL; --operator lets you run tailscale without sudo afterwards
+```
+
+- The login lives in `/var/lib/tailscale`, so image updates keep it. The client itself updates with the image (`sudo bootc upgrade`), not on its own.
+- A dnf5 override, `/etc/dnf/repos.override.d/90-fenoa-tailscale.repo`, restricts Tailscale's repository to the `tailscale` package and ranks it above Fedora's, so it can never replace a Fedora package and Fedora's older build never wins. The build fails unless the installed package is Tailscale's.
+
 ## Not done (and why)
 
 - **NVIDIA's proprietary driver.** It needs kernel modules built for each kernel (and signed, for Secure Boot); a separate image variant is the likely shape. Mesa's nouveau/NVK is in the image but untested.

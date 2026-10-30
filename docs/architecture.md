@@ -23,6 +23,7 @@ The split follows one rule: the **platform** stage holds everything a non-graphi
 | Step | What | Why |
 |---|---|---|
 | P1 | `packages/platform.packages` | system services, systemd-boot, the Vulkan and Intel VA-API drivers (already in the base, listed so they stay), Docker, base CLI, zsh (new accounts' login shell) |
+| P1b | `tailscale` from Tailscale's repository, restricted to that package and ranked above Fedora via `/etc/dnf/repos.override.d`; fail unless the installed build is Tailscale's | Fedora's build trails upstream; see [platform.md](platform.md#tailscale) |
 | P2 | remove Firefox | the browser is a Flatpak |
 | P3 | systemd-boot; remove rpm-ostree, bootupd, GRUB and shim (and with them GRUB's boot-success units); fail if any survive | composefs + systemd-boot install; see [platform.md](platform.md) |
 | P4 | `COPY system/platform/ /` | units, helpers, tuning drop-ins |
