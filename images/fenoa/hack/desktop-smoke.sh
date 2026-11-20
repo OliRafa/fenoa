@@ -163,6 +163,9 @@ case $lp_unit in
 esac
 [[ "$(systemctl --global is-enabled librepods.service 2>/dev/null)" == "enabled" ]] \
   && ok "librepods.service is enabled for every user" || no "librepods.service is not enabled globally"
+# A YubiKey touch would type its one-time password into the session without this rule.
+udevadm verify --no-summary /usr/lib/udev/rules.d/70-fenoa-yubikey-otp.rules >/dev/null 2>&1 \
+  && ok "the YubiKey OTP udev rule parses" || no "70-fenoa-yubikey-otp.rules missing or invalid"
 sh -n /usr/share/uwsm/env.d/10-fenoa 2>/dev/null && ok "uwsm env.d/10-fenoa parses" || no "uwsm env.d/10-fenoa missing or invalid"
 [[ "$(cat /etc/xdg/hyprland-xdg-terminals.list 2>/dev/null)" == "foot.desktop" ]] && ok "default terminal: foot" || no "hyprland-xdg-terminals.list not foot"
 [[ -f /usr/share/applications/foot.desktop ]] && ok "foot.desktop exists" || no "foot.desktop missing"
