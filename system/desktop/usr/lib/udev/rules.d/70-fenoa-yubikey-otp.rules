@@ -1,0 +1,7 @@
+# A YubiKey's OTP application is a USB keyboard: a touch types a one-time password and Enter into
+# whatever has focus, so brushing the key sends 44 characters into a chat or a terminal. libinput
+# skips the keyboard, so neither Hyprland nor the login screen sees it. FIDO2/U2F (hidraw) and the
+# smartcard (CCID) are separate interfaces that libinput never opens, and the OTP interface's hidraw
+# node stays too, so passkeys, SSH and GPG keys, ykman and HMAC challenge-response keep working.
+# After 60-input-id.rules, which sets ID_INPUT_KEYBOARD.
+ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEYBOARD}=="1", ATTRS{idVendor}=="1050", ENV{LIBINPUT_IGNORE_DEVICE}="1"

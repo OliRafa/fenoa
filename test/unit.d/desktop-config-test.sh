@@ -390,6 +390,23 @@ cache_at=$(grep -nF 'gtk-update-icon-cache -f /usr/share/icons/hicolor' "$contai
   fail "the Containerfile rebuilds the hicolor icon cache after the desktop overlay adds icons"
 pass "the webapps (Spotify, Chess.com, Proton Mail, Proton Calendar, WhatsApp) open in Brave app windows with their own icons"
 
+# --- YubiKey OTP -----------------------------------------------------------------------------------
+
+# A touch on a YubiKey types a one-time password through its keyboard interface. libinput has to skip
+# that keyboard (Yubico's, and keyboards only, so FIDO2 and the smartcard are untouched), and the
+# rule has to sort after 60-input-id.rules, which sets the ID_INPUT_KEYBOARD it matches on.
+yubikey="$D/usr/lib/udev/rules.d/70-fenoa-yubikey-otp.rules"
+[[ -f $yubikey ]] || fail "the YubiKey OTP udev rule ships"
+yubikey_rule=$(grep -vE '^[[:space:]]*(#.*)?$' "$yubikey")
+for key in 'SUBSYSTEM=="input"' 'ENV{ID_INPUT_KEYBOARD}=="1"' 'ATTRS{idVendor}=="1050"' 'ENV{LIBINPUT_IGNORE_DEVICE}="1"'; do
+  [[ $yubikey_rule == *"$key"* ]] || fail "the YubiKey OTP rule has $key" "$yubikey_rule"
+done
+[[ $(basename "$yubikey") > "60-input-id.rules" ]] || fail "the YubiKey OTP rule sorts after 60-input-id.rules"
+if command -v udevadm >/dev/null 2>&1; then
+  out=$(udevadm verify --no-summary "$yubikey" 2>&1) || fail "udevadm verifies the YubiKey OTP rule" "$out"
+fi
+pass "libinput skips the YubiKey's OTP keyboard, so a touch types nothing in the session or the greeter"
+
 # --- packages --------------------------------------------------------------------------------------
 
 packages="$ROOT/packages/desktop.packages"
